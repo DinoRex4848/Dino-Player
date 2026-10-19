@@ -1,0 +1,14 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="DinoPlayer.MP.Export.ExportPresetNameDialog"
+        Title="Save export preset" Width="420" Height="155"
+        MinWidth="360" MinHeight="140"
+        WindowStartupLocation="CenterOwner">
+  <Grid Margin="14" RowDefinitions="Auto,Auto" RowSpacing="12">
+    <TextBox x:Name="NameBox" Grid.Row="0" PlaceholderText="Preset name" />
+    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="Cancel" Click="CancelOnClick" />
+      <Button Content="Save" Click="SaveOnClick" IsDefault="True" />
+    </StackPanel>
+  </Grid>
+</Window>

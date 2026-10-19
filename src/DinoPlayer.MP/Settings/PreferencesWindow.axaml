@@ -1,0 +1,71 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="DinoPlayer.MP.Settings.PreferencesWindow"
+        Title="Preferences" Width="680" Height="580"
+        MinWidth="560" MinHeight="550"
+        WindowStartupLocation="CenterOwner">
+  <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto" RowSpacing="14">
+    <TextBlock Grid.Row="0" Text="Preferences" FontSize="20" FontWeight="SemiBold" />
+
+    <Grid Grid.Row="1" ColumnDefinitions="190,*" ColumnSpacing="12">
+      <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+        <TextBlock Text="Default export preset" />
+        <TextBlock x:Name="DefaultExportPresetInfo" Text="ⓘ" Foreground="{DynamicResource TextMuted}"
+                   FontSize="14" FontWeight="SemiBold" />
+      </StackPanel>
+      <ComboBox x:Name="DefaultExportPresetCombo" Grid.Column="1" />
+    </Grid>
+
+    <Grid Grid.Row="2" ColumnDefinitions="190,*,Auto" ColumnSpacing="8">
+      <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+        <TextBlock Text="Default export location" />
+        <TextBlock x:Name="DefaultOutputFolderInfo" Text="ⓘ" Foreground="{DynamicResource TextMuted}"
+                   FontSize="14" FontWeight="SemiBold" />
+      </StackPanel>
+      <TextBox x:Name="DefaultOutputFolderBox" Grid.Column="1" IsReadOnly="True"
+               PlaceholderText="Use the source video's folder" />
+      <Button Grid.Column="2" Content="Browse…" Click="BrowseDefaultOutputFolderOnClick" />
+    </Grid>
+
+    <Grid Grid.Row="3" ColumnDefinitions="190,*,*,Auto" ColumnSpacing="8">
+      <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+        <TextBlock Text="Speed Controls" />
+        <TextBlock x:Name="SpeedControlsInfo" Text="ⓘ" Foreground="{DynamicResource TextMuted}"
+                   FontSize="14" FontWeight="SemiBold" />
+      </StackPanel>
+      <TextBox x:Name="SpeedUpShortcutBox" Grid.Column="1" IsReadOnly="True"
+               ToolTip.Tip="Speed up playback. Click here and press a key or key combination to change it." />
+      <TextBox x:Name="SpeedDownShortcutBox" Grid.Column="2" IsReadOnly="True"
+               ToolTip.Tip="Slow down playback. Click here and press a key or key combination to change it." />
+      <Button Grid.Column="3" Content="Reset" Click="ResetSpeedShortcutsOnClick" />
+    </Grid>
+
+    <Grid Grid.Row="4" ColumnDefinitions="190,*" ColumnSpacing="12">
+      <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+        <TextBlock Text="Playback at end" />
+        <TextBlock x:Name="PlaybackEndInfo" Text="ⓘ" Foreground="{DynamicResource TextMuted}" FontSize="14" FontWeight="SemiBold" />
+      </StackPanel>
+      <ComboBox x:Name="PlaybackEndCombo" Grid.Column="1" AutomationProperties.Name="Playback at end" />
+    </Grid>
+    <StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="5">
+      <CheckBox x:Name="ShowDiagnosticLogCheck" Content="Show diagnostic log" />
+      <TextBlock x:Name="ShowDiagnosticLogInfo" Text="ⓘ" Foreground="{DynamicResource TextMuted}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+    </StackPanel>
+    <StackPanel Grid.Row="6" Orientation="Horizontal" Spacing="5">
+      <CheckBox x:Name="ShowPlayerQueueButtonCheck" Content="Show Add to queue button in player" />
+      <TextBlock x:Name="ShowPlayerQueueButtonInfo" Text="ⓘ" Foreground="{DynamicResource TextMuted}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+    </StackPanel>
+
+    <StackPanel Grid.Row="7" Orientation="Horizontal" Spacing="5">
+      <CheckBox x:Name="EditableCropTimesCheck" Content="Enable editable crop times" />
+      <TextBlock x:Name="EditableCropTimesInfo" Text="ⓘ" Foreground="{DynamicResource TextMuted}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+    </StackPanel>
+
+    <TextBlock x:Name="StatusText" Grid.Row="8" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" IsVisible="False" />
+
+    <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="Cancel" Click="CancelOnClick" />
+      <Button Classes="primary" Content="Save" Click="SaveOnClick" IsDefault="True" />
+    </StackPanel>
+  </Grid>
+</Window>

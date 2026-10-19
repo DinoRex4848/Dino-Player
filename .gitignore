@@ -1,0 +1,25 @@
+**/bin/
+**/obj/
+**/logs/
+**/data/
+/publish/
+Test Media*/
+*.user
+*.suo
+*.zip
+*.tar.gz
+*.log
+*.tmp
+.test-artifacts/
+.vs/
+.idea/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+/.agents/
+/.codex/
+/.aws/
+/settings.json
+/DinoPlayer/

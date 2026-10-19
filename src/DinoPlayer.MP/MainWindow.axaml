@@ -1,0 +1,241 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:DinoPlayer.MP.Controls"
+        xmlns:export="using:DinoPlayer.MP.Export"
+        xmlns:primitives="using:Avalonia.Controls.Primitives"
+        x:Class="DinoPlayer.MP.MainWindow"
+        Title="Dino Player" Width="1280" Height="860" MinWidth="900" MinHeight="650"
+        DragDrop.AllowDrop="True" DragDrop.DragOver="Window_DragOver" DragDrop.Drop="Window_Drop">
+  <Window.Styles>
+    <!-- Include generated controls and template parts (thumbs, scrollbars and expander headers). -->
+    <Style Selector=":is(Control).player-surface, .player-surface :is(Control), .player-surface /template/ :is(Control), .player-surface :is(Control) /template/ :is(Control)">
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="IsTabStop" Value="False" />
+    </Style>
+  </Window.Styles>
+  <Grid x:Name="RootGrid" RowDefinitions="Auto,Auto,*" Margin="10"
+        Focusable="True" IsTabStop="False" FocusAdorner="{x:Null}">
+    <Grid x:Name="HeaderGrid" Classes="player-surface" ColumnDefinitions="240,*,240" Margin="0,0,0,8">
+      <Menu x:Name="NormalMenu" VerticalAlignment="Center">
+        <MenuItem Header="_File">
+          <MenuItem x:Name="OpenMenuItem" Header="_Open…" Click="OpenButtonOnClick" IsEnabled="False" />
+          <MenuItem Header="_Export" Click="ExportButtonOnClick" />
+          <Separator />
+          <MenuItem x:Name="ExitMenuItem" Header="E_xit" Click="ExitMenuItemOnClick" />
+        </MenuItem>
+        <MenuItem Header="_Preferences" Click="PreferencesButtonOnClick" />
+      </Menu>
+      <TextBlock x:Name="MediaNameText" Grid.Column="1" Text="Dino Player" FontSize="18"
+                 HorizontalAlignment="Stretch" TextAlignment="Center" VerticalAlignment="Center"
+                 TextTrimming="CharacterEllipsis" />
+    </Grid>
+    <Border x:Name="ErrorBanner" Classes="player-surface" Grid.Row="1" IsVisible="False" Padding="12,8" Margin="0,0,0,8"
+            Background="{DynamicResource ErrorBackground}" CornerRadius="4">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <TextBlock x:Name="ErrorText" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+        <Button Grid.Column="1" Content="Dismiss" Click="DismissErrorOnClick" />
+      </Grid>
+    </Border>
+    <Grid x:Name="WorkspaceGrid" Grid.Row="2" RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,320"
+          ColumnSpacing="12" RowSpacing="12">
+      <primitives:TabStrip x:Name="WorkspaceTabs" Classes="player-surface" Grid.Column="1" SelectedIndex="0">
+        <primitives:TabStrip.ItemsPanel>
+          <ItemsPanelTemplate><StackPanel Orientation="Vertical" /></ItemsPanelTemplate>
+        </primitives:TabStrip.ItemsPanel>
+        <primitives:TabStripItem Content="Video player" />
+        <primitives:TabStripItem x:Name="ExportTabHeader" Content="Export" />
+      </primitives:TabStrip>
+      <Border x:Name="VideoBorder" Classes="player-surface" Grid.RowSpan="2" Background="Black"
+              BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1"
+              CornerRadius="{DynamicResource PanelRadius}" ClipToBounds="True">
+        <controls:MpvVideoHost x:Name="VideoHost" MinHeight="200" IsVisible="False" />
+      </Border>
+      <Grid x:Name="PlayerSidebar" Classes="player-surface" Grid.Row="1" Grid.Column="1" RowDefinitions="*,120" RowSpacing="12">
+        <Border x:Name="AudioPanel" Classes="panel">
+          <Grid RowDefinitions="Auto,*,Auto">
+            <StackPanel Spacing="3" Margin="0,0,0,10">
+              <TextBlock Text="Audio tracks" Classes="heading" />
+              <TextBlock Text="Master volume" FontWeight="SemiBold" Margin="0,8,0,0" />
+              <Grid ColumnDefinitions="*,48" ColumnSpacing="8">
+                <Slider x:Name="MasterVolumeSlider" Minimum="0" Maximum="100" Value="100" AutomationProperties.Name="Master volume" />
+                <TextBlock x:Name="MasterVolumeText" Grid.Column="1" Text="100%" VerticalAlignment="Center" />
+              </Grid>
+            </StackPanel>
+            <ScrollViewer x:Name="AudioTracksScroller" Grid.Row="1" HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto" AllowAutoHide="True">
+              <ScrollViewer.Resources><x:Double x:Key="ScrollBarSize">10</x:Double></ScrollViewer.Resources>
+              <ScrollViewer.Styles>
+                <!-- Keep the content out of the scrollbar's lane, including while collapsed. -->
+                <Style Selector="ScrollViewer#AudioTracksScroller[AllowAutoHide=True] /template/ ScrollContentPresenter#PART_ContentPresenter">
+                  <Setter Property="Grid.ColumnSpan" Value="1" />
+                  <Setter Property="Grid.RowSpan" Value="1" />
+                </Style>
+                <Style Selector="ScrollViewer#AudioTracksScroller /template/ ScrollBar:vertical">
+                  <Setter Property="ShowDelay" Value="0:0:0" />
+                </Style>
+                <Style Selector="ScrollViewer#AudioTracksScroller /template/ ScrollBar:vertical /template/ RepeatButton#PART_LineUpButton">
+                  <Setter Property="IsVisible" Value="False" />
+                </Style>
+                <Style Selector="ScrollViewer#AudioTracksScroller /template/ ScrollBar:vertical /template/ RepeatButton#PART_LineDownButton">
+                  <Setter Property="IsVisible" Value="False" />
+                </Style>
+              </ScrollViewer.Styles>
+              <StackPanel x:Name="AudioTracksPanel" Spacing="10" Margin="0,0,8,0">
+                <TextBlock Text="Import a video to discover its audio tracks." Classes="muted" TextWrapping="Wrap" />
+              </StackPanel>
+            </ScrollViewer>
+            <ToggleButton x:Name="MuteAllButton" Grid.Row="2" Classes="icon" IsEnabled="False" Margin="0,10,0,0"
+                          ToolTip.Tip="Mute master volume" AutomationProperties.Name="Mute master volume">
+              <PathIcon Data="{StaticResource MuteIcon}" />
+            </ToggleButton>
+          </Grid>
+        </Border>
+        <Border x:Name="CropPanel" Grid.Row="1" Classes="panel">
+          <Grid RowDefinitions="Auto,*" RowSpacing="8">
+            <ToggleButton x:Name="CropToggle" Content="Crop" HorizontalAlignment="Left" IsEnabled="False" />
+            <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="8" IsEnabled="{Binding IsChecked, ElementName=CropToggle}">
+              <StackPanel Spacing="3">
+                <TextBlock Text="Start" Classes="muted" FontSize="11" />
+                <Grid>
+                  <TextBlock x:Name="CropStartText" FontSize="12" Margin="6,4" VerticalAlignment="Center" AutomationProperties.Name="Crop start time" />
+                  <TextBox x:Name="CropStartBox" IsVisible="False" IsReadOnly="True" Focusable="False" IsTabStop="False"
+                           FontSize="12" Padding="6,4" VerticalContentAlignment="Center" AutomationProperties.Name="Crop start time"
+                           ToolTip.Tip="HH:MM:SS.mmm — Enter applies; Escape cancels." />
+                </Grid>
+              </StackPanel>
+              <StackPanel Grid.Column="1" Spacing="3">
+                <TextBlock Text="End" Classes="muted" FontSize="11" />
+                <Grid>
+                  <TextBlock x:Name="CropEndText" FontSize="12" Margin="6,4" VerticalAlignment="Center" AutomationProperties.Name="Crop end time" />
+                  <TextBox x:Name="CropEndBox" IsVisible="False" IsReadOnly="True" Focusable="False" IsTabStop="False"
+                           FontSize="12" Padding="6,4" VerticalContentAlignment="Center" AutomationProperties.Name="Crop end time"
+                           ToolTip.Tip="HH:MM:SS.mmm — Enter applies; Escape cancels." />
+                </Grid>
+              </StackPanel>
+            </Grid>
+          </Grid>
+        </Border>
+      </Grid>
+      <export:ExportView x:Name="ExportPanel" Grid.Row="1" Grid.ColumnSpan="2" IsVisible="False" />
+      <Grid x:Name="NormalPlaybackArea" Classes="player-surface" Grid.Row="2" Grid.ColumnSpan="2" RowDefinitions="Auto,Auto,Auto,Auto">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+          <TextBlock x:Name="PositionText" Text="00:00" VerticalAlignment="Center" MinWidth="54" />
+          <TextBlock x:Name="SpeedText" Text="1×" VerticalAlignment="Center" Classes="muted" />
+        </StackPanel>
+        <Grid Grid.Row="1" Margin="0,6,0,0">
+          <ScrollViewer x:Name="TimelineScroller" HorizontalScrollBarVisibility="Auto" AllowAutoHide="False"
+                        VerticalScrollBarVisibility="Disabled" SizeChanged="TimelineScroller_SizeChanged"
+                        ScrollChanged="TimelineScroller_ScrollChanged">
+            <ScrollViewer.Resources><x:Double x:Key="ScrollBarSize">10</x:Double></ScrollViewer.Resources>
+            <ScrollViewer.Styles>
+              <Style Selector="ScrollViewer#TimelineScroller /template/ ScrollBar:horizontal /template/ RepeatButton#PART_LineUpButton">
+                <Setter Property="IsVisible" Value="False" />
+              </Style>
+              <Style Selector="ScrollViewer#TimelineScroller /template/ ScrollBar:horizontal /template/ RepeatButton#PART_LineDownButton">
+                <Setter Property="IsVisible" Value="False" />
+              </Style>
+            </ScrollViewer.Styles>
+            <Grid ColumnDefinitions="50,Auto,50">
+              <TextBlock x:Name="TimelineStartLabel" Text="0:00" FontSize="10" Classes="muted" HorizontalAlignment="Right" Margin="0,2,4,0" />
+              <Canvas x:Name="TimelineCanvas" Grid.Column="1" Height="58" Background="{DynamicResource ControlBackground}"
+                      PointerPressed="TimelineCanvas_PointerPressed" />
+              <TextBlock x:Name="TimelineEndLabel" Grid.Column="2" Text="0:00" FontSize="10" Classes="muted" Margin="4,2,0,0" />
+            </Grid>
+          </ScrollViewer>
+          <Path x:Name="PlayheadLeftIndicator" Data="M0,8 L11,0 L11,16 Z" Fill="{DynamicResource TextPrimary}"
+                HorizontalAlignment="Left" VerticalAlignment="Top" Margin="2,21,0,0" IsVisible="False" PointerPressed="PlayheadIndicator_PointerPressed" />
+          <Path x:Name="PlayheadRightIndicator" Data="M11,8 L0,0 L0,16 Z" Fill="{DynamicResource TextPrimary}"
+                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,21,2,0" IsVisible="False" PointerPressed="PlayheadIndicator_PointerPressed" />
+        </Grid>
+        <Grid x:Name="PlaybackControlsRow" Grid.Row="2" ColumnDefinitions="*,Auto,*" Margin="0,8,0,0">
+          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,0,8,0" ClipToBounds="True"
+                IsVisible="{Binding IsVisible, ElementName=PlayerAddToQueueButton}">
+            <Button x:Name="PlayerAddToQueueButton" Content="Add to queue" HorizontalAlignment="Left" VerticalAlignment="Center"
+                    IsVisible="False" IsEnabled="False" Click="PlayerAddToQueueOnClick"
+                    ToolTip.Tip="Queue the current crop using the settings currently selected in Export. With Crop off, queue the full video." />
+            <TextBlock x:Name="PlayerQueueStatusText" Grid.Column="1" Classes="muted" FontSize="11" IsVisible="False" Opacity="0"
+                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                       ToolTip.Tip="{Binding Text, RelativeSource={RelativeSource Self}}">
+              <TextBlock.Transitions>
+                <Transitions><DoubleTransition Property="Opacity" Duration="0:0:0.4" /></Transitions>
+              </TextBlock.Transitions>
+            </TextBlock>
+          </Grid>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <Button x:Name="JumpCropStartButton" Classes="icon" IsEnabled="{Binding IsChecked, ElementName=CropToggle}" ToolTip.Tip="Jump to crop start" AutomationProperties.Name="Jump to crop start"><PathIcon Data="{StaticResource JumpStartIcon}" /></Button>
+            <Button x:Name="SetCropStartButton" Content="Set Start" IsEnabled="{Binding IsChecked, ElementName=CropToggle}" ToolTip.Tip="Set crop start to the current position" />
+            <Button x:Name="SkipBackButton" Classes="icon" IsEnabled="False" ToolTip.Tip="Back about 5 seconds (fast seek)" AutomationProperties.Name="Back about 5 seconds"><PathIcon Data="{StaticResource SeekBackIcon}" /></Button>
+            <Button x:Name="PlayPauseButton" Classes="icon primary" IsEnabled="False" ToolTip.Tip="Play" AutomationProperties.Name="Play"><PathIcon x:Name="PlayPauseIcon" Data="{StaticResource PlayIcon}" /></Button>
+            <Button x:Name="SkipForwardButton" Classes="icon" IsEnabled="False" ToolTip.Tip="Forward about 5 seconds (fast seek)" AutomationProperties.Name="Forward about 5 seconds"><PathIcon Data="{StaticResource SeekForwardIcon}" /></Button>
+            <Button x:Name="SetCropEndButton" Content="Set End" IsEnabled="{Binding IsChecked, ElementName=CropToggle}" ToolTip.Tip="Set crop end to the current position" />
+            <Button x:Name="JumpCropEndButton" Classes="icon" IsEnabled="{Binding IsChecked, ElementName=CropToggle}" ToolTip.Tip="Jump to crop end" AutomationProperties.Name="Jump to crop end"><PathIcon Data="{StaticResource JumpEndIcon}" /></Button>
+          </StackPanel>
+          <Button x:Name="FullscreenButton" Grid.Column="2" Classes="icon" IsEnabled="False" HorizontalAlignment="Right" VerticalAlignment="Center"
+                  ToolTip.Tip="Fullscreen (F11)" AutomationProperties.Name="Fullscreen"><PathIcon Data="{StaticResource FullscreenIcon}" /></Button>
+        </Grid>
+        <Expander x:Name="DiagnosticLogExpander" Grid.Row="3" Header="Diagnostic log" IsVisible="False" HorizontalAlignment="Stretch" Margin="0,8,0,0">
+          <Grid RowDefinitions="Auto,*">
+            <TextBlock x:Name="LogPathText" Classes="muted" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4" />
+            <TextBox x:Name="LogTextBox" Grid.Row="1" Height="130" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="monospace" FontSize="11" />
+          </Grid>
+        </Expander>
+      </Grid>
+    </Grid>
+      <Button x:Name="ImportPrompt" Classes="player-surface" Grid.Row="2" Click="OpenButtonOnClick" IsEnabled="False" IsVisible="False"
+              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+              Background="{DynamicResource AppBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1"
+              AutomationProperties.Name="Click anywhere to import video"
+              DragDrop.AllowDrop="True" DragDrop.DragOver="Window_DragOver" DragDrop.Drop="Window_Drop">
+        <Button.Template>
+          <ControlTemplate><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="6"><ContentPresenter Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border></ControlTemplate>
+        </Button.Template>
+        <StackPanel Spacing="16" HorizontalAlignment="Center">
+          <PathIcon Data="{StaticResource ImportIcon}" Width="48" Height="48" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" />
+          <TextBlock Text="Click anywhere to import video" FontSize="22" TextAlignment="Center" />
+          <TextBlock Text="Or drop a video here" Classes="muted" TextAlignment="Center" />
+        </StackPanel>
+      </Button>
+    <primitives:Popup x:Name="FullscreenControlsPopup"
+                      PlacementTarget="{Binding ElementName=VideoBorder}"
+                      Placement="AnchorAndGravity"
+                      PlacementAnchor="Bottom"
+                      PlacementGravity="Bottom"
+                      PlacementConstraintAdjustment="SlideX"
+                      VerticalOffset="-72"
+                      IsLightDismissEnabled="False"
+                      Topmost="True"
+                      TakesFocusFromNativeControl="False"
+                      ShouldUseOverlayLayer="False"
+                      IsOpen="False">
+      <Border x:Name="FullscreenControlsBar" Classes="player-surface" Width="760" Height="56"
+              Background="{DynamicResource FullscreenBackground}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1"
+              CornerRadius="12" Padding="10,6"
+              PointerMoved="FullscreenControlsBar_PointerMoved">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="10" VerticalAlignment="Center">
+          <Button x:Name="FullscreenPlayPauseButton" Grid.Column="0" Classes="icon"
+                  ToolTip.Tip="Play" AutomationProperties.Name="Play"
+                  Width="44" Height="40" Padding="0" HorizontalContentAlignment="Center"
+                  VerticalContentAlignment="Center" VerticalAlignment="Center"
+                  IsEnabled="False">
+            <PathIcon x:Name="FullscreenPlayPauseIcon" Data="{StaticResource PlayIcon}" />
+          </Button>
+          <TextBlock x:Name="FullscreenPositionText" Grid.Column="1" Text="00:00"
+                     VerticalAlignment="Center" MinWidth="46" FontSize="12" />
+          <Slider x:Name="FullscreenTimelineSlider" Grid.Column="2" Minimum="0" Maximum="1"
+                  Value="0" IsEnabled="False" VerticalAlignment="Center" Margin="0,-3,0,0" />
+          <TextBlock x:Name="FullscreenDurationText" Grid.Column="3" Text="00:00"
+                     VerticalAlignment="Center" MinWidth="46" HorizontalAlignment="Right"
+                     FontSize="12" />
+          <TextBlock x:Name="FullscreenSpeedText" Grid.Column="4" Text="1×"
+                     VerticalAlignment="Center" MinWidth="30" Foreground="{DynamicResource TextMuted}" FontSize="12" />
+          <Slider x:Name="FullscreenMasterVolumeSlider" Grid.Column="5" Minimum="0" Maximum="100"
+                  Value="100" Width="140" IsEnabled="False" VerticalAlignment="Center" Margin="0,-3,0,0" />
+          <TextBlock x:Name="FullscreenMasterVolumeText" Grid.Column="6" Text="100%"
+                     VerticalAlignment="Center" MinWidth="42" HorizontalAlignment="Right"
+                     FontSize="12" />
+        </Grid>
+      </Border>
+    </primitives:Popup>
+  </Grid>
+</Window>

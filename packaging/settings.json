@@ -1,0 +1,19 @@
+{
+  "version": 6,
+  "general": {
+    "defaultOutputFolder": "",
+    "loopByDefault": false,
+    "showDiagnosticLog": false,
+    "showPlayerQueueButton": false,
+    "editableCropTimes": false,
+    "defaultExportPresetName": ""
+  },
+  "exportPresets": [],
+  "audio": { "trackPresets": [] },
+  "playbackShortcuts": {
+    "speedUpKey": "Equal",
+    "speedUpModifiers": "None",
+    "speedDownKey": "Minus",
+    "speedDownModifiers": "None"
+  }
+}

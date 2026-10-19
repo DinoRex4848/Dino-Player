@@ -1,0 +1,13 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- All icons share a 24 by 24 view box and use the control foreground. -->
+  <StreamGeometry x:Key="PlayIcon">M7,4 L21,12 L7,20 Z</StreamGeometry>
+  <StreamGeometry x:Key="PauseIcon">M6,4 H10 V20 H6 Z M14,4 H18 V20 H14 Z</StreamGeometry>
+  <StreamGeometry x:Key="SeekBackIcon">M12,5 L3,12 L12,19 Z M22,5 L13,12 L22,19 Z</StreamGeometry>
+  <StreamGeometry x:Key="SeekForwardIcon">M2,5 L11,12 L2,19 Z M12,5 L21,12 L12,19 Z</StreamGeometry>
+  <StreamGeometry x:Key="JumpStartIcon">M3,4 H6 V20 H3 Z M20,4 L8,12 L20,20 Z</StreamGeometry>
+  <StreamGeometry x:Key="JumpEndIcon">M18,4 H21 V20 H18 Z M4,4 L16,12 L4,20 Z</StreamGeometry>
+  <StreamGeometry x:Key="FullscreenIcon">M3,3 H10 V6 H6 V10 H3 Z M14,3 H21 V10 H18 V6 H14 Z M3,14 H6 V18 H10 V21 H3 Z M18,14 H21 V21 H14 V18 H18 Z</StreamGeometry>
+  <StreamGeometry x:Key="MuteIcon">M2,9 H6 L12,4 V20 L6,15 H2 Z M16,7 L19,10 L22,7 L24,9 L21,12 L24,15 L22,17 L19,14 L16,17 L14,15 L17,12 L14,9 Z</StreamGeometry>
+  <StreamGeometry x:Key="ImportIcon">M2,5 H9 L12,8 H22 V20 H2 Z M11,10 V15 H8 L12,19 L16,15 H13 V10 Z</StreamGeometry>
+</ResourceDictionary>

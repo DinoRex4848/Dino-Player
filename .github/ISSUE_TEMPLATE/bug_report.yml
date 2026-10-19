@@ -1,0 +1,36 @@
+name: Bug report
+description: Report a playback, export, or interface problem.
+title: "[Bug]: "
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Dino Player version
+      placeholder: 1.5.2
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and graphics hardware
+      placeholder: Fedora 44, XWayland, NVIDIA / Windows 11, AMD
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include the source format and audio-track count if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Logs or screenshots
+      description: Attach relevant diagnostics if available.

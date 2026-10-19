@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/DinoPlayer.MP/DinoPlayer.MP.csproj" />
+  <Project Path="tests/DinoPlayer.MP.Tests/DinoPlayer.MP.Tests.csproj" />
+</Solution>

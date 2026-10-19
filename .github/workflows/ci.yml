@@ -1,0 +1,53 @@
+name: Build and tests
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install Linux media dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libmpv2 libx11-6 libice6 libsm6 fontconfig
+      - name: Restore
+        run: dotnet restore DinoPlayer.MP.slnx
+      - name: Build Release
+        run: dotnet build DinoPlayer.MP.slnx -c Release --no-restore
+      - name: Non-graphical regressions
+        if: runner.os == 'Windows'
+        run: dotnet run --project tests/DinoPlayer.MP.Tests -c Release --no-build --no-restore
+      - name: Regressions and FFmpeg/libmpv integration
+        if: runner.os == 'Linux'
+        run: dotnet run --project tests/DinoPlayer.MP.Tests -c Release --no-build --no-restore -- --integration

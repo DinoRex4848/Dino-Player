@@ -1,0 +1,20 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Color x:Key="AccentColor">#7BAE7F</Color>
+    <SolidColorBrush x:Key="AppBackground">#151719</SolidColorBrush>
+    <SolidColorBrush x:Key="PanelBackground">#202326</SolidColorBrush>
+    <SolidColorBrush x:Key="PanelBorder">#343A3E</SolidColorBrush>
+    <SolidColorBrush x:Key="ControlBackground">#292E31</SolidColorBrush>
+    <SolidColorBrush x:Key="TextPrimary">#EEF0EE</SolidColorBrush>
+    <SolidColorBrush x:Key="TextMuted">#A4ACA6</SolidColorBrush>
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+    <SolidColorBrush x:Key="AccentHoverBrush">#91C795</SolidColorBrush>
+    <SolidColorBrush x:Key="CropSelectionBrush" Color="{StaticResource AccentColor}" Opacity="0.22" />
+    <SolidColorBrush x:Key="ErrorBrush">#E29A9A</SolidColorBrush>
+    <SolidColorBrush x:Key="ErrorBackground">#39272A</SolidColorBrush>
+    <SolidColorBrush x:Key="FullscreenBackground">#E6151719</SolidColorBrush>
+    <Thickness x:Key="PanelPadding">12</Thickness>
+    <Thickness x:Key="ControlPadding">12,7</Thickness>
+    <CornerRadius x:Key="PanelRadius">6</CornerRadius>
+    <x:Double x:Key="BodyFontSize">13</x:Double>
+    <x:Double x:Key="HeadingFontSize">17</x:Double>
+</ResourceDictionary>

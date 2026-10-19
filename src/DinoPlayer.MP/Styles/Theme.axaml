@@ -1,0 +1,76 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Shared styles; colors and sizing tokens are in Palette.axaml. -->
+
+  <Style Selector="Window">
+    <Setter Property="Background" Value="{DynamicResource AppBackground}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+    <Setter Property="FontSize" Value="{DynamicResource BodyFontSize}" />
+  </Style>
+  <Style Selector="Border.panel">
+    <Setter Property="Background" Value="{DynamicResource PanelBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource PanelBorder}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource PanelRadius}" />
+    <Setter Property="Padding" Value="{DynamicResource PanelPadding}" />
+  </Style>
+  <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="{DynamicResource TextMuted}" /></Style>
+  <Style Selector="TextBlock.heading">
+    <Setter Property="FontSize" Value="{DynamicResource HeadingFontSize}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="Button, ToggleButton">
+    <Setter Property="Background" Value="{DynamicResource ControlBackground}" />
+    <Setter Property="Padding" Value="{DynamicResource ControlPadding}" />
+    <Setter Property="CornerRadius" Value="4" />
+  </Style>
+  <Style Selector="Button.icon, ToggleButton.icon">
+    <Setter Property="Width" Value="36" />
+    <Setter Property="Height" Value="34" />
+    <Setter Property="Padding" Value="8" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="ToggleButton.icon:checked">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AppBackground}" />
+  </Style>
+  <Style Selector="Button.primary">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AppBackground}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}" />
+  </Style>
+  <Style Selector="TextBox"><Setter Property="Background" Value="{DynamicResource ControlBackground}" /></Style>
+  <Style Selector="ComboBox"><Setter Property="HorizontalAlignment" Value="Stretch" /></Style>
+  <Style Selector="TabStripItem">
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="FontSize" Value="20" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="ContentTemplate">
+      <DataTemplate><TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding}" /></DataTemplate>
+    </Setter>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="Transparent" Padding="10,9" ClipToBounds="True">
+          <Grid RowDefinitions="Auto,Auto">
+            <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" />
+            <Border x:Name="SelectionLine" Grid.Row="1" Height="2" Margin="0,7,0,0"
+                    Background="{DynamicResource AccentBrush}" IsVisible="False" />
+          </Grid>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+  </Style>
+  <Style Selector="TabStripItem:selected">
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+  </Style>
+  <Style Selector="TabStripItem:selected /template/ Border#SelectionLine">
+    <Setter Property="IsVisible" Value="True" />
+  </Style>
+  <Style Selector="TabStripItem:pointerover"><Setter Property="Foreground" Value="{DynamicResource AccentHoverBrush}" /></Style>
+</Styles>

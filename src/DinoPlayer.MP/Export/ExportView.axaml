@@ -1,0 +1,155 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="DinoPlayer.MP.Export.ExportView" Background="{DynamicResource AppBackground}">
+  <UserControl.Styles>
+    <!-- Keep form inputs focusable while action buttons leave keyboard focus where it is. -->
+    <Style Selector="Button, ToggleButton, RepeatButton">
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="IsTabStop" Value="False" />
+    </Style>
+  </UserControl.Styles>
+  <Grid ColumnSpacing="10">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="*" MinWidth="360" />
+      <ColumnDefinition Width="8" />
+      <ColumnDefinition Width="*" MinWidth="360" />
+    </Grid.ColumnDefinitions>
+    <Grid RowDefinitions="Auto,*,Auto,Auto,Auto" MinWidth="350" RowSpacing="10">
+      <StackPanel Spacing="8">
+        <TextBlock Text="Export settings" Classes="heading"/>
+        <TextBlock x:Name="SourceText" Classes="muted" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+          <ComboBox x:Name="PresetCombo"/>
+          <Button x:Name="SavePresetButton" Grid.Column="1" Content="Save As…"/>
+          <Button x:Name="DeletePresetButton" Grid.Column="2" Content="Delete"/>
+        </Grid>
+      </StackPanel>
+      <ScrollViewer x:Name="EncodingScroller" Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+        <Grid RowSpacing="12" RowDefinitions="3*,2*" MinHeight="{Binding Viewport.Height, ElementName=EncodingScroller}">
+          <Border x:Name="VideoSettingsPanel" Classes="panel" MinHeight="260">
+            <Grid RowDefinitions="Auto,Auto,*,Auto">
+              <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,10">
+                <TextBlock Text="Video" FontSize="16" FontWeight="SemiBold"/>
+                <ToggleButton x:Name="VideoAdvancedToggle" Grid.Column="1" Content="Advanced"/>
+              </Grid>
+              <Grid Grid.Row="1" ColumnDefinitions="100,*" ColumnSpacing="8" Margin="0,0,0,10">
+                <TextBlock Text="Format" VerticalAlignment="Center"/>
+                <ComboBox x:Name="ContainerCombo" Grid.Column="1" AutomationProperties.Name="Export format"/>
+              </Grid>
+              <Grid x:Name="VideoSimplePanel" Grid.Row="2" ColumnDefinitions="100,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="8" VerticalAlignment="Top">
+                <TextBlock Text="Resolution" VerticalAlignment="Center"/>
+                <ComboBox x:Name="ResolutionCombo" Grid.Column="1"/>
+                <TextBlock Grid.Row="1" Text="Video codec" VerticalAlignment="Center"/>
+                <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <ComboBox x:Name="VideoCodecCombo"/>
+                  <CheckBox x:Name="VideoGpuCheck" Grid.Column="1" Content="GPU (NVENC)" VerticalAlignment="Center"/>
+                </Grid>
+                <Grid x:Name="VideoRateRow" Grid.Row="2" Grid.ColumnSpan="2" ColumnDefinitions="2*,3*" RowDefinitions="Auto" ColumnSpacing="12" RowSpacing="8">
+                  <Grid ColumnDefinitions="100,*" ColumnSpacing="8">
+                    <TextBlock Text="Preset" VerticalAlignment="Center"/>
+                    <ComboBox x:Name="VideoPresetCombo" Grid.Column="1" AutomationProperties.Name="Video preset"/>
+                  </Grid>
+                  <Grid x:Name="VideoRateField" Grid.Column="1" ColumnDefinitions="100,*,Auto" ColumnSpacing="8">
+                    <TextBlock x:Name="VideoRateLabel" Text="Bitrate (Mbps)" VerticalAlignment="Center"/>
+                    <TextBox x:Name="VideoBitrateBox" Grid.Column="1" MinWidth="60" Text="8" VerticalContentAlignment="Center" AutomationProperties.Name="Video bitrate or quality"/>
+                    <ComboBox x:Name="VideoRateControlCombo" Grid.Column="2" MinWidth="125" AutomationProperties.Name="Video rate control"/>
+                  </Grid>
+                </Grid>
+              </Grid>
+              <TextBox x:Name="VideoAdvancedBox" Grid.Row="2" IsVisible="False" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="monospace" PlaceholderText="-c:v libx264 -preset medium -b:v 8M"/>
+              <CheckBox x:Name="CopyPlaybackSpeedCheck" Grid.Row="3" Content="Copy playback speed" Margin="0,10,0,0"/>
+            </Grid>
+          </Border>
+          <Border x:Name="AudioSettingsPanel" Grid.Row="1" Classes="panel" MinHeight="180">
+            <Grid RowDefinitions="Auto,*">
+              <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,10">
+                <TextBlock Text="Audio" FontSize="16" FontWeight="SemiBold"/>
+                <ToggleButton x:Name="AudioAdvancedToggle" Grid.Column="1" Content="Advanced"/>
+              </Grid>
+              <StackPanel x:Name="AudioSimplePanel" Grid.Row="1" Spacing="6">
+                <Grid ColumnDefinitions="100,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                  <TextBlock Text="Audio codec" VerticalAlignment="Center"/>
+                  <ComboBox x:Name="AudioCodecCombo" Grid.Column="1"/>
+                  <TextBlock Grid.Row="1" Text="Bitrate" VerticalAlignment="Center"/>
+                  <ComboBox x:Name="AudioBitrateCombo" Grid.Row="1" Grid.Column="1"/>
+                </Grid>
+                <WrapPanel>
+                  <CheckBox x:Name="KeepTracksSeparateCheck" Content="Keep tracks separate" Margin="0,0,12,0"/>
+                  <CheckBox x:Name="IgnoreVolumeCheck" Content="Ignore volume sliders"/>
+                </WrapPanel>
+                <TextBlock Text="Only checked tracks are exported." Classes="muted" FontSize="12" TextWrapping="Wrap"/>
+              </StackPanel>
+              <TextBox x:Name="AudioAdvancedBox" Grid.Row="1" IsVisible="False" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="monospace" PlaceholderText="-c:a aac -b:a 192k"/>
+            </Grid>
+          </Border>
+        </Grid>
+      </ScrollViewer>
+      <Border Grid.Row="2" Classes="panel">
+        <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
+          <TextBlock Text="Output" FontWeight="SemiBold"/>
+          <Grid Grid.Row="1" ColumnDefinitions="100,*" ColumnSpacing="8">
+            <TextBlock Text="File name" VerticalAlignment="Center"/>
+            <TextBox x:Name="OutputNameBox" Grid.Column="1" PlaceholderText="File name without extension" AutomationProperties.Name="Export file name"/>
+          </Grid>
+          <Grid x:Name="OutputFolderRow" Grid.Row="2" ColumnDefinitions="*,Auto" RowDefinitions="Auto" ColumnSpacing="12" RowSpacing="6">
+            <Grid ColumnDefinitions="100,*,Auto" ColumnSpacing="8">
+              <TextBlock Text="Export folder" VerticalAlignment="Center"/>
+              <TextBox x:Name="OutputFolderBox" Grid.Column="1" MinWidth="80" IsReadOnly="True" ToolTip.Tip="{Binding Text, RelativeSource={RelativeSource Self}}" AutomationProperties.Name="Export folder"/>
+              <Button x:Name="BrowseOutputButton" Grid.Column="2" Content="Browse…"/>
+            </Grid>
+            <CheckBox x:Name="OverwriteCheck" Grid.Column="1" Content="Overwrite existing file" VerticalAlignment="Center" ToolTip.Tip="Queued clips still receive distinct filenames automatically."/>
+          </Grid>
+        </Grid>
+      </Border>
+      <TextBlock x:Name="StatusText" Grid.Row="3" Classes="muted" TextWrapping="Wrap" MaxHeight="48"/>
+      <WrapPanel Grid.Row="4">
+        <Button x:Name="StartExportButton" Classes="primary" Content="Start export" Click="StartExportOnClick" Margin="0,0,8,0"/>
+        <Button x:Name="AddToQueueButton" Content="Add to queue" Click="AddToQueueOnClick"/>
+      </WrapPanel>
+    </Grid>
+    <GridSplitter x:Name="ExportPaneSplitter" Grid.Column="1" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" HorizontalAlignment="Stretch" Background="{DynamicResource PanelBorder}"/>
+    <ScrollViewer x:Name="QueueScroller" Grid.Column="2" HorizontalScrollBarVisibility="Disabled">
+      <Grid x:Name="QueueLayout" Height="{Binding Viewport.Height, ElementName=QueueScroller}" RowDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto" MinWidth="350" RowSpacing="8">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="Export queue" FontSize="20" FontWeight="SemiBold"/>
+        </Grid>
+        <StackPanel Grid.Row="1" Spacing="6">
+          <TextBlock x:Name="ProgressText" Text="No export running" TextWrapping="Wrap"/>
+          <ProgressBar x:Name="ExportProgress" Height="7" Minimum="0" Maximum="100"/>
+          <TextBlock x:Name="QueueSummaryText" Foreground="{DynamicResource TextMuted}"/>
+        </StackPanel>
+        <WrapPanel Grid.Row="2">
+          <Button x:Name="StartQueueButton" Classes="primary" Content="Start queue" Click="StartQueueOnClick" Margin="0,0,6,6"/>
+          <Button x:Name="PauseQueueButton" Content="Pause after current" Click="PauseQueueOnClick" Margin="0,0,6,6"/>
+          <Button x:Name="ResumeQueueButton" Content="Resume queue" Click="ResumeQueueOnClick" IsVisible="False" Margin="0,0,6,6"/>
+          <Button x:Name="CancelButton" Content="Cancel current" Click="CancelExportOnClick" Margin="0,0,6,6"/>
+          <Button x:Name="CancelAllButton" Content="Cancel all" Click="CancelAllOnClick" Margin="0,0,0,6"/>
+        </WrapPanel>
+        <ListBox x:Name="QueueList" Grid.Row="3" MinHeight="100"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <Grid ColumnDefinitions="*,Auto" Margin="4" ColumnSpacing="8" ToolTip.Tip="{Binding OutputPath}">
+                <StackPanel>
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource TextMuted}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding Status}" VerticalAlignment="Center"/>
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <WrapPanel Grid.Row="4">
+          <Button x:Name="RemoveJobButton" Content="Remove" Click="RemoveJobOnClick" Margin="0,0,6,6"/>
+          <Button x:Name="MoveUpButton" Content="Move up" Click="MoveUpOnClick" Margin="0,0,6,6"/>
+          <Button x:Name="MoveDownButton" Content="Move down" Click="MoveDownOnClick" Margin="0,0,6,6"/>
+          <Button x:Name="RetryJobButton" Content="Retry" Click="RetryJobOnClick" Margin="0,0,6,6"/>
+          <Button x:Name="ClearFinishedButton" Content="Clear finished" Click="ClearFinishedOnClick" Margin="0,0,0,6"/>
+        </WrapPanel>
+        <ScrollViewer Grid.Row="5" MaxHeight="72">
+          <TextBlock x:Name="SelectedJobText" Foreground="{DynamicResource TextMuted}" TextWrapping="Wrap"/>
+        </ScrollViewer>
+        <TextBox x:Name="LogBox" Grid.Row="6" Height="130" IsReadOnly="True" AcceptsReturn="True" FontFamily="monospace" FontSize="11" TextWrapping="NoWrap"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
+      </Grid>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

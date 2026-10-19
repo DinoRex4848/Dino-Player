@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RuntimeIdentifiers>linux-x64;win-x64</RuntimeIdentifiers>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>../../Icons/Dino_Player_Logo.ico</ApplicationIcon>
+    <AssemblyName>DinoPlayer.MP</AssemblyName>
+    <Version>1.5.2</Version>
+    <Product>Dino Player</Product>
+    <Title>Dino Player</Title>
+    <RootNamespace>DinoPlayer.MP</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DinoPlayer.MP.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="../../Icons/Dino Player Logo.png" Link="Assets/AppIcon.png" />
+    <AvaloniaResource Include="../../Icons/Dino_Player_Logo.ico" Link="Assets/AppIcon.ico" />
+    <None Include="../../Icons/Dino Player Logo.png" Link="DinoPlayer.MP.png" Condition="'$(RuntimeIdentifier)' != 'win-x64'"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'linux-x64' Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('Linux')))">
+    <None Include="../../scripts/install-linux-desktop.sh" Link="install-desktop.sh"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="MpvInputBridge.lua" LogicalName="DinoPlayer.MP.MpvInputBridge.lua" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(DinoPlayerPortable)' == 'true'">
+    <None Include="../../packaging/settings.json" Link="settings.json"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"
+          ExcludeFromSingleFile="true" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(DinoPlayerMpvBundleDirectory)' != '' And '$(RuntimeIdentifier)' == 'linux-x64'">
+    <Content Include="$(DinoPlayerMpvBundleDirectory)/*" Link="%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"
+             ExcludeFromSingleFile="false" />
+  </ItemGroup>
+
+  <Target Name="ExcludePortableDebugSymbols" AfterTargets="ComputeFilesToPublish" Condition="'$(DinoPlayerPortable)' == 'true'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb'" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="RequirePortableLinuxRuntime" BeforeTargets="PrepareForBuild"
+          Condition="'$(DinoPlayerPortable)' == 'true' And '$(RuntimeIdentifier)' == 'linux-x64'">
+    <Error Condition="'$(DinoPlayerMpvBundleDirectory)' == '' Or !Exists('$(DinoPlayerMpvBundleDirectory)/libmpv.so.2')"
+           Text="Portable Linux publishing requires DinoPlayerMpvBundleDirectory pointing to libmpv.so.2 and its matching native dependencies." />
+  </Target>
+</Project>
