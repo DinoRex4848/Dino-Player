@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+
+- Replace the player screenshot with approved gameplay paused at 00:25, and update the user guide and screenshot capture notes.
+
 ## 1.5.2 — 2026-10-18
 
 ### Fixed

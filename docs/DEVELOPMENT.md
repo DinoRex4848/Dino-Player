@@ -65,6 +65,12 @@ This installs Dino Player in your applications menu with its icon and matches ru
 
 Portable build profiles are in `src/DinoPlayer.MP/Properties/PublishProfiles`. To recreate the portable executables, use `-p:PublishProfile=Portable-Windows` or `-p:PublishProfile=Portable-Linux`; Linux additionally requires `-p:DinoPlayerMpvBundleDirectory="/path/to/matching/native/libraries"`. The verified Linux native inputs must be placed in `publish/portable-linux-x64/lib`; they are not included in a source checkout. Copy the external mpv and FFmpeg binaries into their portable staging directories, then run `python3 scripts/package-portable.py` to create and verify both ZIPs. The native dependency set inherited from v1.5.1 is recorded in `packaging/dependencies-v1.5.1.json`; the filename identifies that dependency baseline, not the current app version. Some native inputs have only provenance/hashes recorded and must be supplied separately. Do not substitute a moving `latest` download if its hash differs. The packaging script reads the app version from the project file, verifies the supplied native inputs, and includes the required files, GPL license, third-party notices, and fresh default preferences. Debug symbols and runtime logs are excluded. Python 3.11 or later is required.
 
+## Documentation screenshots
+
+The README and user guide share `docs/images/player.png`: the approved gameplay capture from `Gear of War E-Day Clip.mkv`, paused at **00:25** with a **00:20–00:30** crop selected. The source clip is supplied locally and is not included in the repository. The Export screenshot, `docs/images/export.png`, uses generated multi-track test media.
+
+To refresh the player screenshot, use a 1280×860 logical window with the audio sidebar and timeline visible, pause the gameplay clip at 25 seconds, and select the 20–30 second crop. Capture the native application window so the embedded video is included; an Avalonia render-only capture can leave the video area black. Preview the replacement before updating the documentation image.
+
 ## Test media
 
 With FFmpeg installed, create a small four-audio-track fixture for playback and export checks:

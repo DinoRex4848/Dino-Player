@@ -32,6 +32,10 @@ The queue is stored only for the current session. Closing with unfinished jobs o
 
 ## Player UI and appearance
 
+The player below shows gameplay paused at **00:25**, with a **00:20–00:30** crop selected. The highlighted timeline region marks the portion to export when Crop is enabled.
+
+![Dino Player showing gameplay paused at 00:25 with a 20–30 second crop](images/player.png)
+
 With no video open, click the import prompt, drop a video on it, or use **File → Open**. The right sidebar contains workspace tabs, a scrolling audio panel, and a separate crop panel. The fullscreen control is below the timeline; F11 and double-clicking the video also toggle fullscreen.
 
 New imports stay paused at the beginning while saved audio-track settings are restored and the mix is applied. Playback waits for mpv to finish preparing the starting frame, then begins from 00:00, or remains paused if the player was already paused. Controls become available after setup. Recreating the native video surface restores the previous position and pause state. Both timelines refresh directly from mpv's seek/restart events, so jumps appear promptly even between regular UI refreshes.

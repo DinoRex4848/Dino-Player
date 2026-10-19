@@ -9,7 +9,7 @@ A Windows and Linux video player for reviewing gameplay, choosing audio tracks, 
 [![Build and tests](https://github.com/DinoRex4848/Dino-Player/actions/workflows/ci.yml/badge.svg)](https://github.com/DinoRex4848/Dino-Player/actions/workflows/ci.yml)
 [Download v1.5.2](https://github.com/DinoRex4848/Dino-Player/releases/tag/v1.5.2) · [User guide](docs/USER_GUIDE.md) · [Development](docs/DEVELOPMENT.md) · [Changelog](CHANGELOG.md)
 
-![Dino Player with generated multi-track test media](docs/images/player.png)
+![Dino Player showing gameplay paused at 00:25](docs/images/player.png)
 
 ## What you can do
 
