@@ -65,3 +65,7 @@ Read [Development](docs/DEVELOPMENT.md) for platform setup, test commands, porta
 Use [Issues](https://github.com/DinoRex4848/Dino-Player/issues) to report bugs or suggest features. Include your app version, platform, and steps to reproduce a problem.
 
 Dino Player is licensed under [GNU GPL v3.0](LICENSE). Third-party components retain their own licenses; notices are in [packaging/licenses](packaging/licenses) and included with portable releases.
+
+## AI assistance
+
+Dino Player was made with substantial assistance from ChatGPT and OpenAI Codex, including help writing and debugging code, developing tests, and preparing documentation and releases. I'm still learning to code, and I want to be transparent that this project reflects that collaboration.
