@@ -99,7 +99,7 @@ Linux FFmpeg source revision: https://github.com/FFmpeg/FFmpeg/commit/46d899d7a0
     if windows:
         for file_name, key in (("libmpv-2.dll", "windowsMpv"), ("ffmpeg.exe", "windowsFfmpeg")):
             assert hashlib.sha256((destination / file_name).read_bytes()).hexdigest() == DEPENDENCIES[key]["sha256"]
-    archive = Path(str(destination) + ".zip")
+    archive = PUBLISH / f"Dino-Player-v{VERSION}-{platform.lower()}-x64.zip"
     temporary = Path(str(archive) + ".tmp")
     with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as output:
         for path in sorted(destination.iterdir()):
@@ -131,6 +131,6 @@ if __name__ == "__main__":
     if hashlib.file_digest(path.open("rb"), "sha256").hexdigest() != DEPENDENCIES["linuxFfmpeg"]["binarySha256"]:
         raise RuntimeError(f"Native dependency hash mismatch: {path}")
     results = [package("Windows"), package("Linux")]
-    (PUBLISH / f"Dino Player V{VERSION}.sha256").write_text(
+    (PUBLISH / f"Dino-Player-v{VERSION}.sha256").write_text(
         "".join(f"{digest}  {archive.name}\n" for archive, digest in results)
     )

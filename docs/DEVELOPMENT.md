@@ -131,7 +131,7 @@ python3 scripts/package-portable.py
 5. Commit the source and documentation. Wait for GitHub Actions to pass, then tag that exact commit `v<Version>`.
 6. Create a draft GitHub release, attach both ZIPs and the generated `.sha256` file, verify the uploaded assets, and publish it. Keep generated outputs out of Git.
 
-The Windows staging folder additionally needs `libmpv-2.dll` and `ffmpeg.exe`; the Linux staging folder needs `ffmpeg` plus the matching native library directory. The default `settings.json` comes from `packaging/settings.json`. Release packages include `LICENSE.txt` and component notices in `README.txt`.
+The Windows staging folder additionally needs `libmpv-2.dll` and `ffmpeg.exe`; the Linux staging folder needs `ffmpeg` plus the matching native library directory. The default `settings.json` comes from `packaging/settings.json`. Release packages include `LICENSE.txt` and component notices in `README.txt`. Assets use `Dino-Player-v<Version>-<platform>-x64.zip` and `Dino-Player-v<Version>.sha256`, avoiding spaces so GitHub retains the filenames referenced by the checksums.
 
 ## Continuous integration
 
