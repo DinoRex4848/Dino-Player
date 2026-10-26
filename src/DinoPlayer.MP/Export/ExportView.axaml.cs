@@ -50,7 +50,7 @@ public sealed partial class ExportView : UserControl, IDisposable
         OutputFolderRow.SizeChanged += (_, _) => UpdatePairedRow(OutputFolderRow, OverwriteCheck, "*,Auto");
         QueueLayout.LayoutUpdated += (_, _) => UpdateQueueMinimumHeight();
         _refreshTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(200), DispatcherPriority.Background,
-            (_, _) => RefreshQueue()) { IsEnabled = false };
+            (_, _) => RefreshOnTimer()) { IsEnabled = false };
         QueueList.ItemsSource = _queueItems;
         QueueList.SelectionChanged += (_, _) => { if (!_refreshing) RefreshQueue(); };
         SourceText.Text = "Open a video in the Video player tab to prepare an export.";
@@ -518,7 +518,7 @@ public sealed partial class ExportView : UserControl, IDisposable
             var id = start ? _manager.StartExport(options) : _manager.AddToQueue(options);
             RefreshQueue();
             QueueList.SelectedItem = _queueItems.First(item => item.Id == id);
-            var job = _manager.GetSnapshot().Jobs.First(item => item.Id == id);
+            var job = _manager.GetStatusSnapshot(logJobId: null).Jobs.First(item => item.Id == id);
             message = $"{(start ? "Export scheduled" : "Added to queue")}: {Path.GetFileName(job.Definition.Options.OutputPath)}";
             StatusText.Text = message;
             return true;
@@ -568,23 +568,37 @@ public sealed partial class ExportView : UserControl, IDisposable
         RefreshQueue();
     }
 
+    private void RefreshOnTimer()
+    {
+        if (IsVisible)
+        {
+            RefreshQueue();
+            return;
+        }
+        // While the player tab is shown, only the Export tab header needs the
+        // latest progress and counts. Showing the view refreshes it fully.
+        if (_manager is not null && !_refreshing)
+            StatusUpdated?.Invoke(_manager.GetStatusSnapshot(logJobId: null));
+    }
+
     private void RefreshQueue()
     {
         if (_manager is null || _refreshing) return;
         _refreshing = true;
         try
         {
-            var snapshot = _manager.GetSnapshot();
             var selection = (QueueList.SelectedItem as QueueItem)?.Id;
+            var snapshot = _manager.GetStatusSnapshot(selection);
             var byId = _queueItems.ToDictionary(item => item.Id);
             for (var index = 0; index < snapshot.Jobs.Length; index++)
             {
                 var job = snapshot.Jobs[index];
                 if (!byId.TryGetValue(job.Id, out var item)) item = new QueueItem(job);
                 item.Update(job, snapshot.QueuePaused);
+                if (index < _queueItems.Count && ReferenceEquals(_queueItems[index], item)) continue;
                 var existing = _queueItems.IndexOf(item);
                 if (existing < 0) _queueItems.Insert(index, item);
-                else if (existing != index) _queueItems.Move(existing, index);
+                else _queueItems.Move(existing, index);
             }
             var remaining = snapshot.Jobs.Select(job => job.Id).ToHashSet();
             foreach (var item in _queueItems.Where(item => !remaining.Contains(item.Id)).ToArray()) _queueItems.Remove(item);

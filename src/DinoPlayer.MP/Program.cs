@@ -8,7 +8,11 @@ internal static class Program
     public static void Main(string[] args)
     {
         AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>
+        {
             AppLog.Error($"Unhandled exception: {eventArgs.ExceptionObject}");
+            // The process may end right after this handler returns.
+            AppLog.Flush();
+        };
 
         try
         {

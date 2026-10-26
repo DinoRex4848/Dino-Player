@@ -32,9 +32,13 @@ internal sealed class ExportManager
     internal delegate Task<FfmpegResult> RunExport(string executable, ExportCommand command,
         Action<string> log, Action<double> progress, CancellationToken cancellationToken);
 
-    private sealed class Job(ExportJobDefinition definition)
+    private sealed class Job(ExportJobDefinition definition, string sourceIdentity, string outputIdentity)
     {
         public ExportJobDefinition Definition { get; } = definition;
+        // Resolved once at submission (see PathIdentity), so queue checks compare
+        // strings instead of walking every job's folders on disk each time.
+        public string SourceIdentity { get; } = sourceIdentity;
+        public string OutputIdentity { get; } = outputIdentity;
         public ExportJobState State = ExportJobState.Waiting;
         public bool QueueJob;
         public double Progress;
@@ -44,9 +48,9 @@ internal sealed class ExportManager
         public CancellationTokenSource? Cancellation;
         public TaskCompletionSource Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public ExportJobSnapshot Snapshot()
+        public ExportJobSnapshot Snapshot(bool refreshLog)
         {
-            LogText = Log.TakeSnapshot() ?? LogText;
+            if (refreshLog) LogText = Log.TakeSnapshot() ?? LogText;
             return new(Definition, State, Progress, Error, LogText, QueueJob);
         }
     }
@@ -72,10 +76,21 @@ internal sealed class ExportManager
         _playerSource = playerSource ?? (() => null);
     }
 
-    public ExportManagerSnapshot GetSnapshot()
+    public ExportManagerSnapshot GetSnapshot() => Snapshot(_ => true);
+
+    /// <summary>
+    /// A snapshot that refreshes the log text of at most one job; the others keep
+    /// the log text from their last refresh. Building every log is the costly part.
+    /// </summary>
+    internal ExportManagerSnapshot GetStatusSnapshot(Guid? logJobId) => Snapshot(id => id == logJobId);
+
+    public bool IsStopping { get { lock (_gate) return _shutdown || _cancelAll; } }
+
+    private ExportManagerSnapshot Snapshot(Func<Guid, bool> refreshLog)
     {
         lock (_gate)
-            return new(_jobs.Select(job => job.Snapshot()).ToImmutableArray(), _queueStarted, _queuePaused, _shutdown || _cancelAll);
+            return new(_jobs.Select(job => job.Snapshot(refreshLog(job.Definition.Id))).ToImmutableArray(),
+                _queueStarted, _queuePaused, _shutdown || _cancelAll);
     }
 
     public Guid AddToQueue(ExportOptions options) => Submit(options, start: false);
@@ -91,8 +106,9 @@ internal sealed class ExportManager
             EnsureAccepting();
             ValidateSource(source);
             ValidateDestination(requested, source);
+            var sourceIdentity = PathIdentity(source);
             // A new source must not be a destination still awaiting publication.
-            if (_jobs.Any(job => IsUnfinished(job) && PathsEqual(job.Definition.Options.OutputPath, source)))
+            if (_jobs.Any(job => IsUnfinished(job) && SameIdentity(job.OutputIdentity, sourceIdentity)))
                 throw new ArgumentException("This source is the destination of an unfinished export. Choose another output location for that export first.");
             var output = AllocateDestination(requested, options.Overwrite);
             var id = Guid.NewGuid();
@@ -101,7 +117,7 @@ internal sealed class ExportManager
             var frozen = options with { SourcePath = source, OutputPath = output, Tracks = options.Tracks.ToImmutableArray() };
             var command = ExportCommandBuilder.Build(frozen with { OutputPath = temporary, Overwrite = false });
             command = command with { Arguments = command.Arguments.ToImmutableArray() };
-            var job = new Job(new(id, frozen, command, temporary));
+            var job = new Job(new(id, frozen, command, temporary), sourceIdentity, PathIdentity(output));
             if (start)
             {
                 job.State = ExportJobState.Scheduled;
@@ -395,9 +411,10 @@ internal sealed class ExportManager
         if (!Directory.Exists(Path.GetDirectoryName(output)))
             throw new DirectoryNotFoundException("The output folder does not exist.");
         if (Directory.Exists(output)) throw new ArgumentException("Choose a video filename, not a folder.");
-        if (PathsEqual(output, source) ||
-            _jobs.Any(job => PathsEqual(output, job.Definition.Options.SourcePath)) ||
-            _playerSource() is { Length: > 0 } playerSource && PathsEqual(output, playerSource))
+        var outputIdentity = PathIdentity(output);
+        if (SameIdentity(outputIdentity, PathIdentity(source)) ||
+            _jobs.Any(job => SameIdentity(outputIdentity, job.SourceIdentity)) ||
+            PlayerSourceIdentity() is { } playerSource && SameIdentity(outputIdentity, playerSource))
             throw new ArgumentException("The output must not replace a source video. Choose a different filename.");
     }
 
@@ -405,18 +422,22 @@ internal sealed class ExportManager
     {
         var output = requested;
         var number = 2;
-        while (_jobs.Any(job => PathsEqual(job.Definition.Options.OutputPath, output)) ||
-               _jobs.Any(job => PathsEqual(job.Definition.Options.SourcePath, output)) ||
-               _playerSource() is { Length: > 0 } playerSource && PathsEqual(output, playerSource) ||
-               Directory.Exists(output) || (!overwrite && File.Exists(output)))
+        var playerSource = PlayerSourceIdentity();
+        while (IsReserved(PathIdentity(output)) || Directory.Exists(output) || (!overwrite && File.Exists(output)))
         {
             output = Path.Combine(Path.GetDirectoryName(requested)!,
                 $"{Path.GetFileNameWithoutExtension(requested)}_{number++}{Path.GetExtension(requested)}");
         }
         return output;
+
+        bool IsReserved(string identity) =>
+            _jobs.Any(job => SameIdentity(job.OutputIdentity, identity) || SameIdentity(job.SourceIdentity, identity)) ||
+            (playerSource is not null && SameIdentity(identity, playerSource));
     }
 
-    private static bool PathsEqual(string first, string second) => PathComparer.Equals(PathIdentity(first), PathIdentity(second));
+    private string? PlayerSourceIdentity() => _playerSource() is { Length: > 0 } path ? PathIdentity(path) : null;
+
+    private static bool SameIdentity(string first, string second) => PathComparer.Equals(first, second);
 
     private static string PathIdentity(string path)
     {

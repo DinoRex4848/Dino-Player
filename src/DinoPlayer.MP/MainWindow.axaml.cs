@@ -93,6 +93,11 @@ public sealed partial class MainWindow : Window
         DiagnosticLogExpander.IsVisible = general.ShowDiagnosticLog;
         PlayerAddToQueueButton.IsVisible = general.ShowPlayerQueueButton;
         _logPump = new UiLogPump(LogTextBox);
+        DiagnosticLogExpander.PropertyChanged += (_, args) =>
+        {
+            if (args.Property == IsVisibleProperty || args.Property == Expander.IsExpandedProperty)
+                _logPump.IsShown = DiagnosticLogExpander.IsVisible && DiagnosticLogExpander.IsExpanded;
+        };
         TimelineScroller.AddHandler(PointerWheelChangedEvent, TimelineScrollerOnPointerWheelChanged,
             RoutingStrategies.Tunnel);
 
@@ -275,7 +280,7 @@ public sealed partial class MainWindow : Window
         TimelineCanvas.IsEnabled = FullscreenTimelineSlider.IsEnabled = enabled;
         FullscreenButton.IsEnabled = CropToggle.IsEnabled = enabled;
         SkipBackButton.IsEnabled = SkipForwardButton.IsEnabled = enabled;
-        PlayerAddToQueueButton.IsEnabled = enabled && !_closing && !_exportManager.GetSnapshot().IsStopping;
+        PlayerAddToQueueButton.IsEnabled = enabled && !_closing && !_exportManager.IsStopping;
     }
 
     private async void RunPlayerAction(Func<IPlaybackEngine, Task> action)

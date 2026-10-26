@@ -288,6 +288,17 @@ internal static class Program
                 finally { AppLog.MessageWritten -= bad; AppLog.MessageWritten -= good; }
                 return Task.CompletedTask;
             });
+            await Test("log lines are written in the background and flushed on demand", () =>
+            {
+                AppLog.Initialize();
+                Check(File.Exists(AppLog.LogPath), "The diagnostic log file was not created.");
+                for (var i = 0; i < 500; i++) AppLog.Info($"background log line {i}");
+                AppLog.Flush();
+                using var stream = new FileStream(AppLog.LogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                var text = new StreamReader(stream).ReadToEnd();
+                Check(text.Contains("background log line 0") && text.Contains("background log line 499"), "Queued log lines were not written to the file.");
+                return Task.CompletedTask;
+            });
             await Test("displayed and pending logs are bounded", () =>
             {
                 var log = new BoundedLogBuffer();

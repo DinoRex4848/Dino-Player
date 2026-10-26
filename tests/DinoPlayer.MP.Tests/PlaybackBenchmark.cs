@@ -72,6 +72,9 @@ internal static class PlaybackBenchmark
 
                 heartbeat.Clear(); lastTick = Stopwatch.GetTimestamp(); timer.Start();
                 var logMethod = window.GetType().GetMethod("OnLogMessage", BindingFlags.NonPublic | BindingFlags.Instance)!;
+                // Measure the visible log; a hidden log is not refreshed.
+                var logExpander = window.FindControl<Expander>("DiagnosticLogExpander")!;
+                logExpander.IsVisible = logExpander.IsExpanded = true;
                 var logStart = Stopwatch.StartNew();
                 var logAllocated = GC.GetTotalAllocatedBytes(true);
                 await Task.Run(() =>

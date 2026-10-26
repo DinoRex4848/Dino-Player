@@ -294,7 +294,8 @@ internal static class UiTests
                 Program.Check(Field<DispatcherTimer>(main, "_uiTimer").IsEnabled, "UI timer was not restored.");
                 AppLog.Info("UI log after native host recreation");
                 await Task.Delay(300);
-                Program.Check(Control<TextBox>(main, "LogTextBox").Text!.Contains("UI log after native host recreation"), "Log subscription was not restored.");
+                Program.Check(await ReadDiagnosticLog(main) is { } recreatedLog && recreatedLog.Contains("UI log after native host recreation"),
+                    "Log subscription was not restored.");
                 Console.WriteLine("PASS UI native host recreation restores playback, timer and logs");
                 await SwitchTab(main, true);
                 Control<TextBox>(export, "OutputNameBox").Text = "owner-close";
@@ -978,9 +979,11 @@ internal static class UiTests
         SettingsStore.SavePreferences(null, Program.Temp, new(), true, false);
         main.ApplyPreferences();
         Program.Check(!expander.IsVisible && !expander.IsExpanded, "Disabling diagnostics retained its expander.");
+        var logBeforeHiddenLine = Control<TextBox>(main, "LogTextBox").Text;
         AppLog.Info("Hidden diagnostic test");
         await Task.Delay(250);
-        Program.Check(Control<TextBox>(main, "LogTextBox").Text!.Contains("Hidden diagnostic test"), "Hiding diagnostics stopped log collection.");
+        Program.Check(Control<TextBox>(main, "LogTextBox").Text == logBeforeHiddenLine, "The hidden diagnostic log was still being refreshed.");
+        Program.Check((await ReadDiagnosticLog(main)).Contains("Hidden diagnostic test"), "Hiding diagnostics stopped log collection.");
         await player.SeekAsync(.25);
         Console.WriteLine("PASS UI Preferences save, immediate looping, collapsed diagnostics and logging while hidden");
     }
@@ -1411,6 +1414,19 @@ internal static class UiTests
         Press(slider, .2);
         Move(.8, up);
         Program.Check(slider.Value == Value(.2) && pointer.Captured is null, "A missing release left the volume drag active.");
+    }
+
+    // Shows the diagnostic log long enough to read it, then restores its state.
+    private static async Task<string> ReadDiagnosticLog(MainWindow main)
+    {
+        var expander = Control<Expander>(main, "DiagnosticLogExpander");
+        var (visible, expanded) = (expander.IsVisible, expander.IsExpanded);
+        expander.IsVisible = expander.IsExpanded = true;
+        await Task.Delay(50);
+        var text = Control<TextBox>(main, "LogTextBox").Text ?? "";
+        expander.IsExpanded = expanded;
+        expander.IsVisible = visible;
+        return text;
     }
 
     private static T Control<T>(Control window, string name) where T : Control => window.FindControl<T>(name)!;

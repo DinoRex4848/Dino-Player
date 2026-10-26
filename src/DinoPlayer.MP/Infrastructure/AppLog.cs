@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Channels;
 
 namespace DinoPlayer.MP;
 
@@ -8,7 +9,14 @@ internal static class AppLog
     // One log file is written per launch; older ones beyond this count are removed.
     internal const int RetainedLogFiles = 20;
     private const string LogFilePattern = "dinoplayer-mp-*.log";
+    // File and console output happen on a background task so logging never
+    // waits on the disk from the UI or libmpv threads. A burst beyond this many
+    // unwritten lines drops the oldest ones rather than blocking the caller.
+    private const int MaxPendingLines = 16_384;
     private static readonly object Sync = new();
+    private static readonly Channel<string> Pending = Channel.CreateBounded<string>(
+        new BoundedChannelOptions(MaxPendingLines) { FullMode = BoundedChannelFullMode.DropOldest });
+    private static readonly Task Writer = Task.Run(WriteLoopAsync);
     private static StreamWriter? _writer;
 
     public static event Action<string>? MessageWritten;
@@ -23,7 +31,8 @@ internal static class AppLog
             Directory.CreateDirectory(logDirectory);
             PruneOldLogs(logDirectory, RetainedLogFiles - 1);
             LogPath = Path.Combine(logDirectory, $"dinoplayer-mp-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{Environment.ProcessId}.log");
-            _writer = new StreamWriter(LogPath, append: false, new UTF8Encoding(false)) { AutoFlush = true };
+            var writer = new StreamWriter(LogPath, append: false, new UTF8Encoding(false));
+            lock (Sync) _writer = writer;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -63,17 +72,9 @@ internal static class AppLog
     private static void Write(string level, string message)
     {
         var line = $"{DateTimeOffset.Now:O} [{level}] {message.TrimEnd()}";
-        lock (Sync)
-        {
-            try { _writer?.WriteLine(line); }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ObjectDisposedException)
-            {
-                DisposeWriter();
-                WriteConsole($"File logging stopped: {exception.Message}");
-            }
-        }
+        if (!Pending.Writer.TryWrite(line))
+            WriteConsole(line); // After shutdown.
 
-        WriteConsole(line);
         if (MessageWritten is { } subscribers)
             foreach (Action<string> subscriber in subscribers.GetInvocationList())
             {
@@ -81,6 +82,44 @@ internal static class AppLog
                 catch (Exception exception) { WriteConsole($"Log subscriber failed: {exception.Message}"); }
             }
     }
+
+    private static async Task WriteLoopAsync()
+    {
+        try
+        {
+            while (await Pending.Reader.WaitToReadAsync().ConfigureAwait(false))
+                WritePending();
+        }
+        catch (Exception exception) { WriteConsole($"Log writer stopped: {exception.Message}"); }
+    }
+
+    // Writes every queued line, one file flush and one console write per batch.
+    private static void WritePending()
+    {
+        lock (Sync)
+        {
+            var batch = new StringBuilder();
+            while (Pending.Reader.TryRead(out var line))
+                batch.AppendLine(line);
+            if (batch.Length == 0) return;
+
+            var text = batch.ToString();
+            try
+            {
+                _writer?.Write(text);
+                _writer?.Flush();
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ObjectDisposedException)
+            {
+                DisposeWriter();
+                WriteConsole($"File logging stopped: {exception.Message}");
+            }
+            WriteConsole(text.TrimEnd());
+        }
+    }
+
+    /// <summary>Writes queued lines now, for example before the process terminates.</summary>
+    public static void Flush() => WritePending();
 
     private static void WriteConsole(string message)
     {
@@ -97,8 +136,12 @@ internal static class AppLog
 
     public static void Shutdown()
     {
+        Pending.Writer.TryComplete();
+        try { Writer.Wait(TimeSpan.FromSeconds(2)); }
+        catch (AggregateException) { }
         lock (Sync)
         {
+            WritePending();
             DisposeWriter();
         }
     }
