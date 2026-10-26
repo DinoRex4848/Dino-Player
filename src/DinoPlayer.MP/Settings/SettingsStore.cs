@@ -28,7 +28,7 @@ public static class SettingsStore
     {
         ArgumentNullException.ThrowIfNull(preset);
         if (string.IsNullOrWhiteSpace(preset.Name)) throw new ArgumentException("A preset needs a name.");
-        if (!preset.VideoAdvanced && preset.VideoCodecName != "Copy")
+        if (!preset.VideoAdvanced && preset.VideoCodecName != ExportNames.Copy)
             VideoRateControl.Validate(preset.VideoRateControl, preset.VideoBitrate, preset.VideoQuality,
                 preset.VideoCodecName, preset.UseGpu);
         Repository.Update(settings =>
@@ -175,14 +175,14 @@ internal sealed class SettingsRepository
         foreach (var preset in settings.ExportPresets)
         {
             preset.Name = preset.Name.Trim();
-            preset.Container = preset.Container == "MKV" ? "MKV" : "MP4";
-            preset.Resolution = preset.Resolution is "1280x720" or "1920x1080" or "2560x1440" or "3840x2160" ? preset.Resolution : "Source";
-            preset.VideoCodecName = preset.VideoCodecName is "H.265" or "AV1" or "Copy" ? preset.VideoCodecName : "H.264";
-            preset.AudioCodecName = preset.AudioCodecName is "Opus" or "FLAC" or "Copy" ? preset.AudioCodecName : "AAC";
+            preset.Container = preset.Container == ExportNames.Mkv ? ExportNames.Mkv : ExportNames.Mp4;
+            preset.Resolution = preset.Resolution is "1280x720" or "1920x1080" or "2560x1440" or "3840x2160" ? preset.Resolution : ExportNames.SourceResolution;
+            preset.VideoCodecName = preset.VideoCodecName is ExportNames.H265 or ExportNames.Av1 or ExportNames.Copy ? preset.VideoCodecName : ExportNames.H264;
+            preset.AudioCodecName = preset.AudioCodecName is ExportNames.Opus or ExportNames.Flac or ExportNames.Copy ? preset.AudioCodecName : ExportNames.Aac;
             preset.VideoPreset ??= "medium";
             if (!double.TryParse(preset.VideoBitrate, NumberStyles.Float, CultureInfo.InvariantCulture, out var bitrate) ||
                 !double.IsFinite(bitrate) || bitrate <= 0) preset.VideoBitrate = "8";
-            preset.VideoRateControl = preset.VideoRateControl == "Quality" ? "Quality" : "Bitrate";
+            preset.VideoRateControl = preset.VideoRateControl == ExportNames.Quality ? ExportNames.Quality : ExportNames.Bitrate;
             if (!VideoRateControl.IsValidQuality(preset.VideoQuality, preset.VideoCodecName, preset.UseGpu))
                 preset.VideoQuality = "23";
             preset.AudioBitrate ??= "192k";
@@ -202,9 +202,8 @@ internal sealed class SettingsRepository
 
     private static bool ValidShortcuts(PlaybackShortcutSettings shortcuts)
     {
-        static bool Allowed(string key, string modifiers) => PlaybackShortcut.TryParse(key, modifiers, out var parsed, out _) &&
-            parsed is not (Avalonia.Input.PhysicalKey.F11 or Avalonia.Input.PhysicalKey.Escape or Avalonia.Input.PhysicalKey.Space or
-                Avalonia.Input.PhysicalKey.ArrowLeft or Avalonia.Input.PhysicalKey.ArrowRight);
+        static bool Allowed(string key, string modifiers) =>
+            PlaybackShortcut.TryParse(key, modifiers, out var parsed, out _) && !PlaybackShortcut.IsReserved(parsed);
         return Allowed(shortcuts.SpeedUpKey, shortcuts.SpeedUpModifiers) && Allowed(shortcuts.SpeedDownKey, shortcuts.SpeedDownModifiers) &&
                !PlaybackShortcut.Conflicts(shortcuts.SpeedUpKey, shortcuts.SpeedUpModifiers, shortcuts.SpeedDownKey, shortcuts.SpeedDownModifiers);
     }

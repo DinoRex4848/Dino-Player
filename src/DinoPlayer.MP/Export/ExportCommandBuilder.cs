@@ -34,11 +34,11 @@ internal static class ExportCommandBuilder
         var selectedVideo = options.VideoCodec;
         var selectedAudio = options.AudioCodec;
         var enabledTracks = options.Tracks.Where(track => track.Enabled).ToArray();
-        var videoCopy = !videoAdvanced && selectedVideo == "Copy";
-        var audioCopy = !audioAdvanced && selectedAudio == "Copy";
+        var videoCopy = !videoAdvanced && selectedVideo == ExportNames.Copy;
+        var audioCopy = !audioAdvanced && selectedAudio == ExportNames.Copy;
         var filterAudio = !audioAdvanced && !audioCopy && enabledTracks.Length > 0;
         var mergeAudio = filterAudio && !options.KeepTracksSeparate;
-        var scaleVideo = !videoAdvanced && !videoCopy && options.Resolution is string resolution && resolution != "Source";
+        var scaleVideo = !videoAdvanced && !videoCopy && options.Resolution is string resolution && resolution != ExportNames.SourceResolution;
         var filter = new StringBuilder();
 
         if (scaleVideo || copySpeed)
@@ -126,12 +126,12 @@ internal static class ExportCommandBuilder
         {
             var encoder = selectedVideo switch
             {
-                "H.265" => options.UseGpu ? "hevc_nvenc" : "libx265",
-                "AV1" => options.UseGpu ? "av1_nvenc" : "libsvtav1",
+                ExportNames.H265 => options.UseGpu ? "hevc_nvenc" : "libx265",
+                ExportNames.Av1 => options.UseGpu ? "av1_nvenc" : "libsvtav1",
                 _ => options.UseGpu ? "h264_nvenc" : "libx264"
             };
             args.AddRange(new[] { "-c:v", encoder, "-preset", options.VideoPreset });
-            if (options.VideoRateControl == "Quality")
+            if (options.VideoRateControl == ExportNames.Quality)
             {
                 var quality = int.Parse(options.VideoQuality, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
                 args.AddRange(options.UseGpu
@@ -155,9 +155,9 @@ internal static class ExportCommandBuilder
                 args.AddRange(new[] { "-c:a", "copy" });
             else
             {
-                var encoder = selectedAudio switch { "Opus" => "libopus", "FLAC" => "flac", _ => "aac" };
+                var encoder = selectedAudio switch { ExportNames.Opus => "libopus", ExportNames.Flac => "flac", _ => "aac" };
                 args.AddRange(new[] { "-c:a", encoder });
-                if (selectedAudio != "FLAC")
+                if (selectedAudio != ExportNames.Flac)
                     args.AddRange(new[] { "-b:a", options.AudioBitrate });
             }
         }
@@ -210,15 +210,16 @@ internal static class ExportCommandBuilder
         if (options.CropEnabled && (!double.IsFinite(options.Start) || !double.IsFinite(options.End) ||
             options.Start < 0 || options.End <= options.Start || options.End > options.Duration))
             throw new ArgumentException("The crop end must be after its start and within the source duration.");
-        if (!options.VideoAdvanced && options.VideoCodec != "Copy")
+        if (!options.VideoAdvanced && options.VideoCodec != ExportNames.Copy)
             VideoRateControl.Validate(options.VideoRateControl, options.VideoBitrate, options.VideoQuality,
                 options.VideoCodec, options.UseGpu);
         if (options.Tracks.Any(t => t.Enabled && (!double.IsFinite(t.VolumePercent) || t.VolumePercent < 0 || t.VolumePercent > 150)))
             throw new ArgumentException("Audio volume must be between 0 and 150 percent.");
         if (options.Tracks.Any(t => t.Enabled && t.SourceIndex < 0 && t.AudioOrdinal < 0))
             throw new ArgumentException("An audio track has no valid stream selector.");
-        var video = options.VideoAdvanced ? ParseArguments(options.VideoAdvancedText) : [];
-        var audio = options.AudioAdvanced && options.Tracks.Any(t => t.Enabled) ? ParseArguments(options.AudioAdvancedText) : [];
+        // Parse advanced arguments here so an unclosed quote is reported on submission.
+        if (options.VideoAdvanced) ParseArguments(options.VideoAdvancedText);
+        if (options.AudioAdvanced && options.Tracks.Any(t => t.Enabled)) ParseArguments(options.AudioAdvancedText);
         if (options.CopyPlaybackSpeed && !CanCopySpeed(options))
             throw new ArgumentException("Copy playback speed cannot be combined with stream copy or custom maps and filters.");
     }
@@ -230,8 +231,8 @@ internal static class ExportCommandBuilder
             var video = options.VideoAdvanced ? ParseArguments(options.VideoAdvancedText) : [];
             var audio = options.AudioAdvanced && options.Tracks.Any(t => t.Enabled)
                 ? ParseArguments(options.AudioAdvancedText) : [];
-            return (options.VideoAdvanced || options.VideoCodec != "Copy") &&
-                   (!options.Tracks.Any(t => t.Enabled) || options.AudioAdvanced || options.AudioCodec != "Copy") &&
+            return (options.VideoAdvanced || options.VideoCodec != ExportNames.Copy) &&
+                   (!options.Tracks.Any(t => t.Enabled) || options.AudioAdvanced || options.AudioCodec != ExportNames.Copy) &&
                    !HasConflictingFlags(video) && !HasConflictingFlags(audio);
         }
         catch (ArgumentException) { return false; }

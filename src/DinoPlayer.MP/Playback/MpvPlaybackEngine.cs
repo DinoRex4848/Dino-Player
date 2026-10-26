@@ -6,17 +6,42 @@ namespace DinoPlayer.MP.Playback;
 
 public sealed class MpvPlaybackEngine : IPlaybackEngine
 {
+    // Values from libmpv's client.h (mpv_format and mpv_event_id).
+    private const int MpvFormatNone = 0;
+    private const int MpvFormatString = 1;
     private const int MpvFormatFlag = 3;
     private const int MpvFormatInt64 = 4;
     private const int MpvFormatDouble = 5;
+    private const int MpvEventNone = 0;
     private const int MpvEventShutdown = 1;
     private const int MpvEventLogMessage = 2;
+    private const int MpvEventStartFile = 6;
     private const int MpvEventEndFile = 7;
     private const int MpvEventFileLoaded = 8;
+    private const int MpvEventClientMessage = 16;
     private const int MpvEventVideoReconfig = 17;
     private const int MpvEventSeek = 20;
     private const int MpvEventPlaybackRestart = 21;
-    private const int MpvEventClientMessage = 16;
+    private const int MpvEventPropertyChange = 22;
+
+    // Reply ids for observed properties. time-pos is not observed: it changes
+    // every frame, so PollEvent samples it at the UI cadence instead.
+    private enum ObservedProperty : ulong
+    {
+        Duration = 1, Speed, Paused, VideoOutput, GpuContext, HardwareDecoder, DecoderDroppedFrames, OutputDroppedFrames
+    }
+
+    private static readonly (ObservedProperty Id, string Name, int Format)[] ObservedProperties =
+    {
+        (ObservedProperty.Duration, "duration", MpvFormatDouble),
+        (ObservedProperty.Speed, "speed", MpvFormatDouble),
+        (ObservedProperty.Paused, "pause", MpvFormatFlag),
+        (ObservedProperty.VideoOutput, "current-vo", MpvFormatString),
+        (ObservedProperty.GpuContext, "current-gpu-context", MpvFormatString),
+        (ObservedProperty.HardwareDecoder, "hwdec-current", MpvFormatString),
+        (ObservedProperty.DecoderDroppedFrames, "decoder-frame-drop-count", MpvFormatInt64),
+        (ObservedProperty.OutputDroppedFrames, "frame-drop-count", MpvFormatInt64)
+    };
 
     [DllImport("user32.dll", ExactSpelling = true)]
     private static extern uint GetDoubleClickTime();
@@ -203,7 +228,6 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
     public Task SetPausedAsync(bool paused)
     {
-        ThrowIfDisposed();
         return InvokeOnMpvThreadAsync(() =>
         {
             SetPausedNative(paused);
@@ -313,7 +337,6 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
     public Task SetMasterVolumeAsync(double volumePercent)
     {
-        ThrowIfDisposed();
         var volume = Math.Clamp(volumePercent, 0, 150);
         return InvokeOnMpvThreadAsync(() =>
         {
@@ -324,7 +347,6 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
     public Task SetCursorAutohideAsync(bool enabled)
     {
-        ThrowIfDisposed();
         return InvokeOnMpvThreadAsync(() =>
         {
             SetPropertyNative("cursor-autohide", enabled ? "4000" : "no");
@@ -334,7 +356,6 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
     public Task SetLoopingAsync(bool enabled)
     {
-        ThrowIfDisposed();
         return InvokeOnMpvThreadAsync(() =>
         {
             SetPropertyNative("loop-file", enabled ? "inf" : "no");
@@ -349,7 +370,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
         // The UI owns the mutable AudioTrack instances. Copy their values before
         // queueing work so the mpv thread never observes a partially edited model.
-        var tracks = _audioTracks.Select(track => new AudioTrack
+        var tracks = AudioTracks.Select(track => new AudioTrack
         {
             Id = track.Id,
             SourceIndex = track.SourceIndex,
@@ -427,39 +448,31 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
     private void ObserveProperties()
     {
-        var properties = new (string Name, int Format)[]
-        {
-            ("time-pos", MpvFormatDouble), ("duration", MpvFormatDouble), ("speed", MpvFormatDouble),
-            ("pause", MpvFormatFlag), ("current-vo", 1), ("current-gpu-context", 1), ("hwdec-current", 1),
-            ("decoder-frame-drop-count", MpvFormatInt64), ("frame-drop-count", MpvFormatInt64)
-        };
-        for (var i = 1; i < properties.Length; i++)
-            Check(MpvNative.mpv_observe_property(_context, (ulong)i + 1, properties[i].Name, properties[i].Format),
-                $"observe {properties[i].Name}");
+        foreach (var (id, name, format) in ObservedProperties)
+            Check(MpvNative.mpv_observe_property(_context, (ulong)id, name, format), $"observe {name}");
     }
 
     private void UpdateObservedProperty(MpvNative.MpvEvent ev)
     {
         if (!_mediaLoaded || _activeGeneration != Generation || ev.Data == IntPtr.Zero) return;
         var property = Marshal.PtrToStructure<MpvNative.MpvEventProperty>(ev.Data);
-        var available = property.Format != 0 && property.Data != IntPtr.Zero;
+        var available = property.Format != MpvFormatNone && property.Data != IntPtr.Zero;
         var number = available && property.Format == MpvFormatDouble ? Marshal.PtrToStructure<double>(property.Data) : 0;
         if (!double.IsFinite(number)) number = 0;
         var integer = available && property.Format == MpvFormatInt64 ? Marshal.ReadInt64(property.Data) : 0;
         var flag = !available || property.Format != MpvFormatFlag || Marshal.ReadInt32(property.Data) != 0;
-        var text = available && property.Format == 1 ? Marshal.PtrToStringUTF8(Marshal.ReadIntPtr(property.Data)) : null;
+        var text = available && property.Format == MpvFormatString ? Marshal.PtrToStringUTF8(Marshal.ReadIntPtr(property.Data)) : null;
         var snapshot = GetSnapshot();
-        snapshot = ev.ReplyUserData switch
+        snapshot = (ObservedProperty)ev.ReplyUserData switch
         {
-            1 => snapshot with { PositionSeconds = Math.Max(0, number) },
-            2 => snapshot with { DurationSeconds = Math.Max(0, number) },
-            3 => snapshot with { PlaybackSpeed = available ? Math.Clamp(number, 0.25, 3) : 1 },
-            4 => snapshot with { IsPaused = flag },
-            5 => snapshot with { VideoOutput = text ?? "unknown" },
-            6 => snapshot with { GpuContext = text ?? "unknown" },
-            7 => snapshot with { HardwareDecoder = text ?? "none" },
-            8 => snapshot with { DecoderDroppedFrames = integer },
-            9 => snapshot with { OutputDroppedFrames = integer },
+            ObservedProperty.Duration => snapshot with { DurationSeconds = Math.Max(0, number) },
+            ObservedProperty.Speed => snapshot with { PlaybackSpeed = available ? Math.Clamp(number, 0.25, 3) : 1 },
+            ObservedProperty.Paused => snapshot with { IsPaused = flag },
+            ObservedProperty.VideoOutput => snapshot with { VideoOutput = text ?? "unknown" },
+            ObservedProperty.GpuContext => snapshot with { GpuContext = text ?? "unknown" },
+            ObservedProperty.HardwareDecoder => snapshot with { HardwareDecoder = text ?? "none" },
+            ObservedProperty.DecoderDroppedFrames => snapshot with { DecoderDroppedFrames = integer },
+            ObservedProperty.OutputDroppedFrames => snapshot with { OutputDroppedFrames = integer },
             _ => snapshot
         };
         Volatile.Write(ref _snapshot, snapshot);
@@ -469,7 +482,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     {
         switch (mpvEvent.EventId)
         {
-            case 0:
+            case MpvEventNone:
                 break;
             case MpvEventShutdown:
                 AppLog.Info("libmpv sent shutdown event.");
@@ -481,11 +494,11 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             case MpvEventClientMessage:
                 HandleClientMessage(mpvEvent.Data);
                 break;
-            case 6: // MPV_EVENT_START_FILE: associate queued native events with their load request.
+            case MpvEventStartFile: // Associate queued native events with their load request.
                 var entry = mpvEvent.Data == IntPtr.Zero ? -1 : Marshal.ReadInt64(mpvEvent.Data);
                 _activeGeneration = _entryGenerations.GetValueOrDefault(entry, -1);
                 break;
-            case 22: // MPV_EVENT_PROPERTY_CHANGE
+            case MpvEventPropertyChange:
                 UpdateObservedProperty(mpvEvent);
                 break;
             case MpvEventFileLoaded:
@@ -573,7 +586,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     {
         try
         {
-            _audioTracks = DiscoverAudioTracks();
+            Volatile.Write(ref _audioTracks, DiscoverAudioTracks());
             _mediaLoaded = true;
             _videoReady = false;
 

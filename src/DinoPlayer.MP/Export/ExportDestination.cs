@@ -17,6 +17,6 @@ internal static class ExportDestination
             value.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || value.Contains('/') || value.Contains('\\'))
             throw new ArgumentException("Enter a file name without a folder path.");
         if (string.IsNullOrWhiteSpace(folder)) throw new ArgumentException("Choose an export folder.");
-        return Path.Combine(folder.Trim(), value + (container == "MKV" ? ".mkv" : ".mp4"));
+        return Path.Combine(folder.Trim(), value + (container == ExportNames.Mkv ? ".mkv" : ".mp4"));
     }
 }

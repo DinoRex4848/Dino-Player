@@ -1,13 +1,9 @@
 using System.Collections.ObjectModel;
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
-using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Media;
 using Avalonia.Platform.Storage;
-using Avalonia.Threading;
+using DinoPlayer.MP.Controls;
 
 namespace DinoPlayer.MP.Settings;
 
@@ -15,13 +11,6 @@ public sealed partial class PreferencesWindow : Window
 {
     private const string ManualOption = "— Manual —";
     private readonly ObservableCollection<string> _presetNames = new();
-    private readonly InfoTooltip _defaultExportPresetTooltip;
-    private readonly InfoTooltip _defaultOutputFolderTooltip;
-    private readonly InfoTooltip _speedControlsTooltip;
-    private readonly InfoTooltip _playbackEndTooltip;
-    private readonly InfoTooltip _showDiagnosticLogTooltip;
-    private readonly InfoTooltip _showPlayerQueueButtonTooltip;
-    private readonly InfoTooltip _editableCropTimesTooltip;
     private string _speedUpKey = "Equal";
     private string _speedUpModifiers = "None";
     private string _speedDownKey = "Minus";
@@ -35,10 +24,11 @@ public sealed partial class PreferencesWindow : Window
         RefreshPresetNames();
         DefaultOutputFolderBox.Text = SettingsStore.GetDefaultOutputFolder();
         PlaybackEndCombo.ItemsSource = new[] { "Stop", "Loop" };
-        PlaybackEndCombo.SelectedIndex = SettingsStore.Current.General.LoopByDefault ? 1 : 0;
-        ShowDiagnosticLogCheck.IsChecked = SettingsStore.Current.General.ShowDiagnosticLog;
-        ShowPlayerQueueButtonCheck.IsChecked = SettingsStore.Current.General.ShowPlayerQueueButton;
-        EditableCropTimesCheck.IsChecked = SettingsStore.Current.General.EditableCropTimes;
+        var general = SettingsStore.Current.General;
+        PlaybackEndCombo.SelectedIndex = general.LoopByDefault ? 1 : 0;
+        ShowDiagnosticLogCheck.IsChecked = general.ShowDiagnosticLog;
+        ShowPlayerQueueButtonCheck.IsChecked = general.ShowPlayerQueueButton;
+        EditableCropTimesCheck.IsChecked = general.EditableCropTimes;
         var shortcuts = SettingsStore.GetPlaybackShortcuts();
         _speedUpKey = shortcuts.SpeedUpKey;
         _speedUpModifiers = shortcuts.SpeedUpModifiers;
@@ -48,85 +38,20 @@ public sealed partial class PreferencesWindow : Window
         SpeedUpShortcutBox.KeyDown += SpeedUpShortcutBoxOnKeyDown;
         SpeedDownShortcutBox.KeyDown += SpeedDownShortcutBoxOnKeyDown;
 
-        _defaultExportPresetTooltip = new InfoTooltip(
-            DefaultExportPresetInfo,
+        HoverPopup.ForText(DefaultExportPresetInfo,
             "Select a saved preset to initialize export settings on the first Export visit or first use of the player's Add to queue button. Your encoding choices are kept between clips. Choose Manual to use the export defaults.");
-        _defaultOutputFolderTooltip = new InfoTooltip(
-            DefaultOutputFolderInfo,
+        HoverPopup.ForText(DefaultOutputFolderInfo,
             "New exports use this folder by default. If it is empty or unavailable, the source video's folder is used instead.");
-        _speedControlsTooltip = new InfoTooltip(
-            SpeedControlsInfo,
+        HoverPopup.ForText(SpeedControlsInfo,
             "Set the keyboard shortcuts used to speed up or slow down playback. The default keys are = / + and - / _." );
-        _playbackEndTooltip = new InfoTooltip(PlaybackEndInfo,
+        HoverPopup.ForText(PlaybackEndInfo,
             "Stop pauses playback at the end of the video. Loop repeats the whole video, regardless of the crop selection. Saving applies this immediately.");
-        _showDiagnosticLogTooltip = new InfoTooltip(ShowDiagnosticLogInfo,
+        HoverPopup.ForText(ShowDiagnosticLogInfo,
             "Show a collapsible diagnostic log below the player timeline. File logging and FFmpeg export logs remain active when it is hidden.");
-        _showPlayerQueueButtonTooltip = new InfoTooltip(ShowPlayerQueueButtonInfo,
+        HoverPopup.ForText(ShowPlayerQueueButtonInfo,
             "Show Add to queue at the bottom left below the player timeline. Each click saves the current crop, audio choices, and export settings currently selected in Export. With Crop off, the whole video is queued. You stay in the player tab.");
-        _editableCropTimesTooltip = new InfoTooltip(EditableCropTimesInfo,
+        HoverPopup.ForText(EditableCropTimesInfo,
             "Replace the crop time labels with editable fields. Enter a timecode as HH:MM:SS or HH:MM:SS.mmm. Enter applies it; Escape cancels the edit. Playback shortcuts leave typing alone while a field has focus. Saving applies this immediately.");
-    }
-
-    private sealed class InfoTooltip
-    {
-        private readonly TextBlock _target;
-        private readonly DispatcherTimer _openTimer;
-        private readonly Popup _popup;
-
-        public InfoTooltip(TextBlock target, string message)
-        {
-            _target = target;
-            _popup = new Popup
-            {
-                PlacementTarget = target,
-                Placement = PlacementMode.Top,
-                PlacementConstraintAdjustment = PopupPositionerConstraintAdjustment.SlideX,
-                VerticalOffset = -4,
-                Child = new Border
-                {
-                    Background = UiTheme.Resource<IBrush>("ControlBackground"),
-                    BorderBrush = UiTheme.Resource<IBrush>("PanelBorder"),
-                    BorderThickness = new Thickness(0),
-                    CornerRadius = new CornerRadius(0),
-                    Padding = new Thickness(9, 5),
-                    IsHitTestVisible = false,
-                    Child = new TextBlock
-                    {
-                        Text = message,
-                        Foreground = UiTheme.Resource<IBrush>("TextPrimary"),
-                        TextWrapping = TextWrapping.Wrap,
-                        MaxWidth = 300
-                    }
-                }
-            };
-            _openTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(500)
-            };
-            _openTimer.Tick += (_, _) =>
-            {
-                _openTimer.Stop();
-                if (_target.IsPointerOver)
-                    Show();
-            };
-            _target.DetachedFromVisualTree += (_, _) => { _openTimer.Stop(); _popup.IsOpen = false; };
-            _target.PointerEntered += (_, _) =>
-            {
-                _openTimer.Stop();
-                _openTimer.Start();
-            };
-            _target.PointerExited += (_, _) =>
-            {
-                _openTimer.Stop();
-                _popup.IsOpen = false;
-            };
-        }
-
-        private void Show()
-        {
-            if (_target.Bounds.Width > 0)
-                _popup.IsOpen = true;
-        }
     }
 
     private void RefreshPresetNames()
@@ -158,7 +83,7 @@ public sealed partial class PreferencesWindow : Window
         {
             if (PlaybackShortcut.Conflicts(_speedUpKey, _speedUpModifiers, _speedDownKey, _speedDownModifiers))
                 throw new InvalidOperationException("Speed up and slow down shortcuts must be different.");
-            if (IsReserved(_speedUpKey) || IsReserved(_speedDownKey))
+            if (PlaybackShortcut.IsReserved(_speedUpKey) || PlaybackShortcut.IsReserved(_speedDownKey))
                 throw new InvalidOperationException("That key is already used for playback or window navigation.");
             SettingsStore.SavePreferences(presetName, DefaultOutputFolderBox.Text, new PlaybackShortcutSettings
             {
@@ -239,12 +164,5 @@ public sealed partial class PreferencesWindow : Window
         _speedDownKey = "Minus";
         _speedDownModifiers = "None";
         RefreshShortcutText();
-    }
-
-    private static bool IsReserved(string keyName)
-    {
-        if (!Enum.TryParse<PhysicalKey>(keyName, true, out var key))
-            return true;
-        return key is PhysicalKey.F11 or PhysicalKey.Escape or PhysicalKey.Space or PhysicalKey.ArrowLeft or PhysicalKey.ArrowRight;
     }
 }

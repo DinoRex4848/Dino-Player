@@ -16,9 +16,9 @@ namespace DinoPlayer.MP.Export;
 public sealed partial class ExportView : UserControl, IDisposable
 {
     private const string FourKResolution = "3840x2160 (4K)";
-    private static readonly string[] Resolutions = { "Source", "1280x720", "1920x1080", "2560x1440", FourKResolution };
-    private static readonly string[] VideoCodecs = { "H.264", "H.265", "AV1", "Copy" };
-    private static readonly string[] AudioCodecs = { "AAC", "Opus", "FLAC", "Copy" };
+    private static readonly string[] Resolutions = { ExportNames.SourceResolution, "1280x720", "1920x1080", "2560x1440", FourKResolution };
+    private static readonly string[] VideoCodecs = { ExportNames.H264, ExportNames.H265, ExportNames.Av1, ExportNames.Copy };
+    private static readonly string[] AudioCodecs = { ExportNames.Aac, ExportNames.Opus, ExportNames.Flac, ExportNames.Copy };
     private static readonly string[] LossyAudioBitrates = { "128k", "192k", "256k", "320k" };
     private ExportContext _context = new();
     private readonly ObservableCollection<string> _presetNames = new();
@@ -38,7 +38,7 @@ public sealed partial class ExportView : UserControl, IDisposable
     private bool _updatingRateControl;
 
     private string SelectedResolution => ResolutionCombo.SelectedItem as string == FourKResolution
-        ? "3840x2160" : ResolutionCombo.SelectedItem as string ?? "Source";
+        ? "3840x2160" : ResolutionCombo.SelectedItem as string ?? ExportNames.SourceResolution;
 
     public ExportView()
     {
@@ -51,7 +51,7 @@ public sealed partial class ExportView : UserControl, IDisposable
         QueueList.ItemsSource = _queueItems;
         QueueList.SelectionChanged += (_, _) => { if (!_refreshing) RefreshQueue(); };
         SourceText.Text = "Open a video in the Video player tab to prepare an export.";
-        ContainerCombo.ItemsSource = new[] { "MP4", "MKV" };
+        ContainerCombo.ItemsSource = new[] { ExportNames.Mp4, ExportNames.Mkv };
         ContainerCombo.SelectedIndex = 0;
         ContainerCombo.SelectionChanged += (_, _) => MarkPresetDirty();
         OutputNameBox.LostFocus += (_, _) => OutputNameBox.Text = ExportDestination.NormalizeName(OutputNameBox.Text);
@@ -61,7 +61,7 @@ public sealed partial class ExportView : UserControl, IDisposable
         VideoCodecCombo.SelectedIndex = 0;
         AudioCodecCombo.ItemsSource = AudioCodecs;
         AudioCodecCombo.SelectedIndex = 0;
-        VideoPresetCombo.ItemsSource = GetCpuPresets("H.264");
+        VideoPresetCombo.ItemsSource = GetCpuPresets(ExportNames.H264);
         VideoPresetCombo.SelectedItem = "medium";
         VideoRateControlCombo.ItemsSource = new[] { "Bitrate", "Target quality" };
         VideoRateControlCombo.SelectedIndex = 0;
@@ -190,8 +190,8 @@ public sealed partial class ExportView : UserControl, IDisposable
     private string BuildSourceDescription()
     {
         var crop = HasCrop
-            ? $"Crop {FormatSeconds(_context.Start)} → {FormatSeconds(_context.End)} ({FormatSeconds(_context.End - _context.Start)})"
-            : $"Full duration {FormatSeconds(_context.Duration)}";
+            ? $"Crop {TimeFormat.ClockWithFraction(_context.Start)} → {TimeFormat.ClockWithFraction(_context.End)} ({TimeFormat.ClockWithFraction(_context.End - _context.Start)})"
+            : $"Full duration {TimeFormat.ClockWithFraction(_context.Duration)}";
         var enabled = _context.Tracks.Count(track => track.Enabled);
         return $"Source: {Path.GetFileName(_context.SourcePath)}  •  {crop}  •  {enabled} audio track(s) selected";
     }
@@ -200,8 +200,8 @@ public sealed partial class ExportView : UserControl, IDisposable
 
     private void RefreshVideoPresets()
     {
-        var codec = VideoCodecCombo.SelectedItem as string ?? "H.264";
-        var copy = codec == "Copy";
+        var codec = VideoCodecCombo.SelectedItem as string ?? ExportNames.H264;
+        var copy = codec == ExportNames.Copy;
         VideoGpuCheck.IsEnabled = !copy;
         ResolutionCombo.IsEnabled = !copy;
         VideoBitrateBox.IsEnabled = !copy;
@@ -236,7 +236,7 @@ public sealed partial class ExportView : UserControl, IDisposable
             VideoBitrateBox.Text = _showingQuality ? _videoQuality : _videoBitrate;
             var gpu = VideoGpuCheck.IsChecked == true;
             VideoRateLabel.Text = _showingQuality ? $"Quality ({(gpu ? "CQ" : "CRF")})" : "Bitrate (Mbps)";
-            var (minimum, maximum) = VideoRateControl.QualityRange(VideoCodecCombo.SelectedItem as string ?? "H.264", gpu);
+            var (minimum, maximum) = VideoRateControl.QualityRange(VideoCodecCombo.SelectedItem as string ?? ExportNames.H264, gpu);
             var tip = _showingQuality
                 ? $"Enter a whole number from {minimum} to {maximum}. Lower values increase quality; output file size varies." +
                   (gpu ? " NVENC quality 0 means automatic and is not a target quality." : "")
@@ -249,14 +249,14 @@ public sealed partial class ExportView : UserControl, IDisposable
 
     private void RefreshAudioBitrates()
     {
-        var codec = AudioCodecCombo.SelectedItem as string ?? "AAC";
-        var copy = codec == "Copy";
-        AudioBitrateCombo.IsEnabled = !copy && codec != "FLAC";
+        var codec = AudioCodecCombo.SelectedItem as string ?? ExportNames.Aac;
+        var copy = codec == ExportNames.Copy;
+        AudioBitrateCombo.IsEnabled = !copy && codec != ExportNames.Flac;
         KeepTracksSeparateCheck.IsEnabled = !copy;
         IgnoreVolumeCheck.IsEnabled = !copy;
         AudioBitrateCombo.ItemsSource = copy ? new[] { "Source" } : codec == "FLAC" ? new[] { "lossless" } : LossyAudioBitrates;
         AudioBitrateCombo.SelectedIndex = 0;
-        if (!copy && codec != "FLAC")
+        if (!copy && codec != ExportNames.Flac)
             AudioBitrateCombo.SelectedItem = "192k";
         RefreshSpeedExportAvailability();
     }
@@ -270,7 +270,7 @@ public sealed partial class ExportView : UserControl, IDisposable
     }
 
     private static string[] GetCpuPresets(string codec) =>
-        codec == "AV1"
+        codec == ExportNames.Av1
             ? new[] { "1", "2", "3", "4", "5", "6", "7", "8", "9", "10" }
             : new[] { "ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow" };
 
@@ -306,15 +306,15 @@ public sealed partial class ExportView : UserControl, IDisposable
     private ExportPreset CapturePreset(string name) => new()
     {
         Name = name,
-        Container = ContainerCombo.SelectedItem as string ?? "MP4",
+        Container = ContainerCombo.SelectedItem as string ?? ExportNames.Mp4,
         Resolution = SelectedResolution,
-        VideoCodecName = VideoCodecCombo.SelectedItem as string ?? "H.264",
+        VideoCodecName = VideoCodecCombo.SelectedItem as string ?? ExportNames.H264,
         UseGpu = VideoGpuCheck.IsChecked == true,
         VideoPreset = VideoPresetCombo.SelectedItem as string ?? "medium",
         VideoBitrate = _videoBitrate,
-        VideoRateControl = _showingQuality ? "Quality" : "Bitrate",
+        VideoRateControl = _showingQuality ? ExportNames.Quality : ExportNames.Bitrate,
         VideoQuality = _videoQuality,
-        AudioCodecName = AudioCodecCombo.SelectedItem as string ?? "AAC",
+        AudioCodecName = AudioCodecCombo.SelectedItem as string ?? ExportNames.Aac,
         AudioBitrate = AudioBitrateCombo.SelectedItem as string ?? "192k",
         KeepTracksSeparate = KeepTracksSeparateCheck.IsChecked == true,
         IgnoreVolume = IgnoreVolumeCheck.IsChecked == true,
@@ -329,15 +329,15 @@ public sealed partial class ExportView : UserControl, IDisposable
         _loadingPreset = true;
         try
         {
-            ContainerCombo.SelectedItem = preset.Container == "MKV" ? "MKV" : "MP4";
-            VideoCodecCombo.SelectedItem = VideoCodecs.Contains(preset.VideoCodecName) ? preset.VideoCodecName : "H.264";
+            ContainerCombo.SelectedItem = preset.Container == ExportNames.Mkv ? ExportNames.Mkv : ExportNames.Mp4;
+            VideoCodecCombo.SelectedItem = VideoCodecs.Contains(preset.VideoCodecName) ? preset.VideoCodecName : ExportNames.H264;
             RefreshVideoPresets();
-            if (VideoCodecCombo.SelectedItem as string != "Copy")
+            if (VideoCodecCombo.SelectedItem as string != ExportNames.Copy)
             {
                 VideoGpuCheck.IsChecked = preset.UseGpu;
                 RefreshVideoPresets();
                 ResolutionCombo.SelectedItem = preset.Resolution == "3840x2160" ? FourKResolution
-                    : Resolutions.Contains(preset.Resolution) ? preset.Resolution : "Source";
+                    : Resolutions.Contains(preset.Resolution) ? preset.Resolution : ExportNames.SourceResolution;
                 VideoPresetCombo.SelectedItem = VideoPresetCombo.Items.Cast<object>()
                     .Any(item => string.Equals(item?.ToString(), preset.VideoPreset, StringComparison.Ordinal))
                     ? preset.VideoPreset
@@ -345,12 +345,12 @@ public sealed partial class ExportView : UserControl, IDisposable
             }
             _videoBitrate = string.IsNullOrWhiteSpace(preset.VideoBitrate) ? "8" : preset.VideoBitrate;
             _videoQuality = string.IsNullOrWhiteSpace(preset.VideoQuality) ? "23" : preset.VideoQuality;
-            VideoRateControlCombo.SelectedIndex = preset.VideoRateControl == "Quality" ? 1 : 0;
+            VideoRateControlCombo.SelectedIndex = preset.VideoRateControl == ExportNames.Quality ? 1 : 0;
             RefreshRateControl();
 
-            AudioCodecCombo.SelectedItem = AudioCodecs.Contains(preset.AudioCodecName) ? preset.AudioCodecName : "AAC";
+            AudioCodecCombo.SelectedItem = AudioCodecs.Contains(preset.AudioCodecName) ? preset.AudioCodecName : ExportNames.Aac;
             RefreshAudioBitrates();
-            if (AudioCodecCombo.SelectedItem as string != "Copy")
+            if (AudioCodecCombo.SelectedItem as string != ExportNames.Copy)
             {
                 AudioBitrateCombo.SelectedItem = AudioBitrateCombo.Items.Cast<object>()
                     .Any(item => string.Equals(item?.ToString(), preset.AudioBitrate, StringComparison.Ordinal))
@@ -460,13 +460,13 @@ public sealed partial class ExportView : UserControl, IDisposable
         PlaybackSpeed = _context.PlaybackSpeed,
         Tracks = _context.Tracks.Select(t => new ExportAudioTrack(t.SourceIndex, t.AudioOrdinal, t.Enabled, t.VolumePercent)).ToImmutableArray(),
         Resolution = SelectedResolution,
-        VideoCodec = VideoCodecCombo.SelectedItem as string ?? "H.264",
+        VideoCodec = VideoCodecCombo.SelectedItem as string ?? ExportNames.H264,
         VideoPreset = VideoPresetCombo.SelectedItem as string ?? "medium",
         VideoBitrate = _videoBitrate,
-        VideoRateControl = _showingQuality ? "Quality" : "Bitrate",
+        VideoRateControl = _showingQuality ? ExportNames.Quality : ExportNames.Bitrate,
         VideoQuality = _videoQuality,
         UseGpu = VideoGpuCheck.IsChecked == true,
-        AudioCodec = AudioCodecCombo.SelectedItem as string ?? "AAC",
+        AudioCodec = AudioCodecCombo.SelectedItem as string ?? ExportNames.Aac,
         AudioBitrate = AudioBitrateCombo.SelectedItem as string ?? "192k",
         KeepTracksSeparate = KeepTracksSeparateCheck.IsChecked == true,
         IgnoreVolume = IgnoreVolumeCheck.IsChecked == true,
@@ -489,7 +489,7 @@ public sealed partial class ExportView : UserControl, IDisposable
             OutputNameBox.Text = ExportDestination.NormalizeName(OutputNameBox.Text);
             var options = CaptureOptions() with
             {
-                OutputPath = ExportDestination.Build(OutputNameBox.Text, OutputFolderBox.Text, ContainerCombo.SelectedItem as string ?? "MP4")
+                OutputPath = ExportDestination.Build(OutputNameBox.Text, OutputFolderBox.Text, ContainerCombo.SelectedItem as string ?? ExportNames.Mp4)
             };
             var id = start ? _manager.StartExport(options) : _manager.AddToQueue(options);
             RefreshQueue();
@@ -622,7 +622,7 @@ public sealed partial class ExportView : UserControl, IDisposable
     private static string Describe(ExportJobSnapshot job)
     {
         var options = job.Definition.Options;
-        var crop = options.CropEnabled ? $"{FormatSeconds(options.Start)} → {FormatSeconds(options.End)}" : "Full video";
+        var crop = options.CropEnabled ? $"{TimeFormat.ClockWithFraction(options.Start)} → {TimeFormat.ClockWithFraction(options.End)}" : "Full video";
         return $"Source: {options.SourcePath}\nOutput: {options.OutputPath}\n{crop} · {options.Tracks.Count(track => track.Enabled)} audio track(s) · {(options.CopyPlaybackSpeed ? options.PlaybackSpeed : 1):0.##}×\n" +
             $"Video: {(options.VideoAdvanced ? options.VideoAdvancedText : options.VideoCodec)} · Audio: {(options.AudioAdvanced ? options.AudioAdvancedText : options.AudioCodec)}" +
             (job.Definition.Command.Warning is { } warning ? $"\n{warning}" : "") +
@@ -635,7 +635,7 @@ public sealed partial class ExportView : UserControl, IDisposable
         public ExportJobSnapshot Job { get; private set; } = job;
         public string Name => Path.GetFileName(Job.Definition.Options.OutputPath);
         public string OutputPath => Job.Definition.Options.OutputPath;
-        public string Summary => $"{Path.GetFileName(Job.Definition.Options.SourcePath)} · {(Job.Definition.Options.CropEnabled ? $"{FormatSeconds(Job.Definition.Options.Start)} → {FormatSeconds(Job.Definition.Options.End)}" : "Full video")}";
+        public string Summary => $"{Path.GetFileName(Job.Definition.Options.SourcePath)} · {(Job.Definition.Options.CropEnabled ? $"{TimeFormat.ClockWithFraction(Job.Definition.Options.Start)} → {TimeFormat.ClockWithFraction(Job.Definition.Options.End)}" : "Full video")}";
         public string Status { get; private set; } = "Waiting";
         public event PropertyChangedEventHandler? PropertyChanged;
         public void Update(ExportJobSnapshot snapshot, bool paused)
@@ -653,13 +653,6 @@ public sealed partial class ExportView : UserControl, IDisposable
             Status = status;
             PropertyChanged?.Invoke(this, new(nameof(Status)));
         }
-    }
-
-    private static string FormatSeconds(double seconds)
-    {
-        var time = TimeSpan.FromSeconds(double.IsFinite(seconds) ? Math.Max(0, seconds) : 0);
-        var fraction = time.Milliseconds == 0 ? "" : $".{time.Milliseconds:000}".TrimEnd('0');
-        return (time.TotalHours >= 1 ? $"{(int)time.TotalHours}:{time.Minutes:D2}:{time.Seconds:D2}" : $"{time.Minutes:D2}:{time.Seconds:D2}") + fraction;
     }
 
     public void Dispose() => _refreshTimer.Stop();

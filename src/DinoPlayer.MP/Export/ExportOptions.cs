@@ -14,14 +14,14 @@ internal sealed record ExportOptions
     public double Duration { get; init; }
     public double PlaybackSpeed { get; init; } = 1;
     public ImmutableArray<ExportAudioTrack> Tracks { get; init; } = [];
-    public string Resolution { get; init; } = "Source";
-    public string VideoCodec { get; init; } = "H.264";
+    public string Resolution { get; init; } = ExportNames.SourceResolution;
+    public string VideoCodec { get; init; } = ExportNames.H264;
     public string VideoPreset { get; init; } = "medium";
     public string VideoBitrate { get; init; } = "8";
-    public string VideoRateControl { get; init; } = "Bitrate";
+    public string VideoRateControl { get; init; } = ExportNames.Bitrate;
     public string VideoQuality { get; init; } = "23";
     public bool UseGpu { get; init; }
-    public string AudioCodec { get; init; } = "AAC";
+    public string AudioCodec { get; init; } = ExportNames.Aac;
     public string AudioBitrate { get; init; } = "192k";
     public bool KeepTracksSeparate { get; init; }
     public bool IgnoreVolume { get; init; }

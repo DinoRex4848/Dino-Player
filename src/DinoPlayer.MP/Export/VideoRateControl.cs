@@ -5,7 +5,7 @@ namespace DinoPlayer.MP.Export;
 internal static class VideoRateControl
 {
     public static (int Minimum, int Maximum) QualityRange(string codec, bool gpu) =>
-        (gpu ? 1 : 0, codec == "AV1" ? 63 : 51);
+        (gpu ? 1 : 0, codec == ExportNames.Av1 ? 63 : 51);
 
     public static bool IsValidQuality(string? value, string codec, bool gpu)
     {
@@ -16,13 +16,13 @@ internal static class VideoRateControl
 
     public static void Validate(string mode, string bitrate, string quality, string codec, bool gpu)
     {
-        if (mode == "Bitrate")
+        if (mode == ExportNames.Bitrate)
         {
             if (!double.TryParse(bitrate, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ||
                 !double.IsFinite(parsed) || parsed <= 0)
                 throw new ArgumentException("Enter a finite video bitrate greater than 0 Mbps.");
         }
-        else if (mode == "Quality")
+        else if (mode == ExportNames.Quality)
         {
             if (!IsValidQuality(quality, codec, gpu))
             {

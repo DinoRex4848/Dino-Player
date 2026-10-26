@@ -1,3 +1,5 @@
+using DinoPlayer.MP.Export;
+
 namespace DinoPlayer.MP.Settings;
 
 // Keep the root object stable and sectioned. New preferences should be added
@@ -49,17 +51,17 @@ public sealed class AudioTrackSetting
 public sealed class ExportPreset
 {
     public string Name { get; set; } = string.Empty;
-    public string Container { get; set; } = "MP4";
+    public string Container { get; set; } = ExportNames.Mp4;
 
-    public string Resolution { get; set; } = "Source";
-    public string VideoCodecName { get; set; } = "H.264";
+    public string Resolution { get; set; } = ExportNames.SourceResolution;
+    public string VideoCodecName { get; set; } = ExportNames.H264;
     public bool UseGpu { get; set; }
     public string VideoPreset { get; set; } = "medium";
     public string VideoBitrate { get; set; } = "8";
-    public string VideoRateControl { get; set; } = "Bitrate";
+    public string VideoRateControl { get; set; } = ExportNames.Bitrate;
     public string VideoQuality { get; set; } = "23";
 
-    public string AudioCodecName { get; set; } = "AAC";
+    public string AudioCodecName { get; set; } = ExportNames.Aac;
     public string AudioBitrate { get; set; } = "192k";
     public bool KeepTracksSeparate { get; set; }
     public bool IgnoreVolume { get; set; }

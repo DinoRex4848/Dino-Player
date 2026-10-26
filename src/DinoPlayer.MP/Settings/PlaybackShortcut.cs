@@ -4,6 +4,14 @@ namespace DinoPlayer.MP.Settings;
 
 public static class PlaybackShortcut
 {
+    // Fixed player keys (see MainWindow.MainWindowOnKeyDown). Speed shortcuts
+    // cannot use them.
+    public static bool IsReserved(PhysicalKey key) =>
+        key is PhysicalKey.F11 or PhysicalKey.Escape or PhysicalKey.Space or PhysicalKey.ArrowLeft or PhysicalKey.ArrowRight;
+
+    public static bool IsReserved(string keyName) =>
+        !Enum.TryParse<PhysicalKey>(keyName, ignoreCase: true, out var key) || IsReserved(key);
+
     public static string Format(string keyName, string modifiers)
     {
         var modifierText = string.Equals(modifiers, "None", StringComparison.OrdinalIgnoreCase)

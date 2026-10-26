@@ -33,11 +33,6 @@ public sealed partial class MainWindow : Window
     private static readonly Cursor FullscreenHiddenCursor = new(StandardCursorType.None);
     private static readonly Thickness NormalRootMargin = new(10);
 
-    private readonly MpvVideoHost _videoHost;
-    private readonly Grid _rootGrid;
-    private readonly TabStrip _workspaceTabs;
-    private readonly TabStripItem _exportTabHeader;
-    private readonly ExportView _exportView;
     private readonly ExportManager _exportManager;
     private bool _exportTabSelected;
     private bool _updatingTabs;
@@ -45,61 +40,10 @@ public sealed partial class MainWindow : Window
     private (IPlaybackEngine Player, long Generation)? _tabResumePlayback;
     private (IPlaybackEngine Player, long Generation, bool Paused)? _preparingMedia;
     private int _playbackUiUpdateQueued;
-    private readonly Grid _headerGrid;
-    private readonly Grid _workspaceGrid;
-    private readonly Grid _playerSidebar;
-    private readonly Border _videoBorder;
-    private readonly Border _errorBanner;
-    private readonly TextBlock _errorText;
-    private readonly Expander _diagnosticLogExpander;
-    private readonly Button _importPrompt;
-    private readonly Button _playerAddToQueueButton;
-    private readonly TextBlock _playerQueueStatusText;
     private bool _isPlayerQueueStatusFading;
     private bool _pickingMedia;
     private bool _preferencesOpen;
-    private readonly Popup _fullscreenControlsPopup;
-    private readonly Border _fullscreenControlsBar;
-    private readonly Grid _normalPlaybackArea;
-    private readonly MenuItem _openMenuItem;
-    private readonly PathIcon _playPauseIcon;
-    private readonly PathIcon _fullscreenPlayPauseIcon;
-    private readonly Button _playPauseButton;
-    private readonly Button _fullscreenButton;
-    private readonly ToggleButton _muteAllButton;
-    private readonly Button _skipBackButton;
-    private readonly Button _skipForwardButton;
-    private readonly ToggleButton _cropToggle;
-    private readonly Button _jumpCropStartButton;
-    private readonly Button _setCropStartButton;
-    private readonly Button _setCropEndButton;
-    private readonly Button _jumpCropEndButton;
-    private readonly Slider _masterVolumeSlider;
-    private readonly TextBlock _masterVolumeText;
-    private readonly TextBlock _positionText;
-    private readonly TextBlock _speedText;
-    private readonly TextBlock _mediaNameText;
-    private readonly TextBlock _timelineStartLabel;
-    private readonly TextBlock _timelineEndLabel;
-    private readonly Slider _fullscreenTimelineSlider;
-    private readonly Button _fullscreenPlayPauseButton;
-    private readonly TextBlock _fullscreenPositionText;
-    private readonly TextBlock _fullscreenDurationText;
-    private readonly TextBlock _fullscreenSpeedText;
-    private readonly Slider _fullscreenMasterVolumeSlider;
-    private readonly TextBlock _fullscreenMasterVolumeText;
-    private readonly TextBlock _logPathText;
-    private readonly TextBox _logTextBox;
     private readonly UiLogPump _logPump;
-    private readonly TextBox _cropStartBox;
-    private readonly TextBox _cropEndBox;
-    private readonly TextBlock _cropStartText;
-    private readonly TextBlock _cropEndText;
-    private readonly StackPanel _audioTracksPanel;
-    private readonly Canvas _timelineCanvas;
-    private readonly ScrollViewer _timelineScroller;
-    private readonly Avalonia.Controls.Shapes.Path _playheadLeftIndicator;
-    private readonly Avalonia.Controls.Shapes.Path _playheadRightIndicator;
     private readonly DispatcherTimer _uiTimer;
     private readonly DispatcherTimer _mixTimer;
     private readonly DispatcherTimer _audioPresetTimer;
@@ -149,128 +93,71 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         ClosingBehavior = WindowClosingBehavior.OwnerWindowOnly;
-
-        _rootGrid = Require<Grid>("RootGrid");
-        _workspaceTabs = Require<TabStrip>("WorkspaceTabs");
-        _exportTabHeader = Require<TabStripItem>("ExportTabHeader");
-        _exportView = Require<ExportView>("ExportPanel");
         _exportManager = new ExportManager(exportRunner, playerSource: () => _currentFilePath);
-        _headerGrid = Require<Grid>("HeaderGrid");
-        _workspaceGrid = Require<Grid>("WorkspaceGrid");
-        _playerSidebar = Require<Grid>("PlayerSidebar");
-        _videoBorder = Require<Border>("VideoBorder");
-        _errorBanner = Require<Border>("ErrorBanner");
-        _errorText = Require<TextBlock>("ErrorText");
-        _diagnosticLogExpander = Require<Expander>("DiagnosticLogExpander");
-        _diagnosticLogExpander.IsVisible = SettingsStore.Current.General.ShowDiagnosticLog;
-        _importPrompt = Require<Button>("ImportPrompt");
-        _playerAddToQueueButton = Require<Button>("PlayerAddToQueueButton");
-        _playerQueueStatusText = Require<TextBlock>("PlayerQueueStatusText");
-        _playerAddToQueueButton.IsVisible = SettingsStore.Current.General.ShowPlayerQueueButton;
-        _fullscreenControlsPopup = Require<Popup>("FullscreenControlsPopup");
-        _fullscreenControlsBar = Require<Border>("FullscreenControlsBar");
-        _normalPlaybackArea = Require<Grid>("NormalPlaybackArea");
-        _videoHost = Require<MpvVideoHost>("VideoHost");
-        _openMenuItem = Require<MenuItem>("OpenMenuItem");
-        _playPauseIcon = Require<PathIcon>("PlayPauseIcon");
-        _fullscreenPlayPauseIcon = Require<PathIcon>("FullscreenPlayPauseIcon");
-        _playPauseButton = Require<Button>("PlayPauseButton");
-        _fullscreenButton = Require<Button>("FullscreenButton");
-        _muteAllButton = Require<ToggleButton>("MuteAllButton");
-        _skipBackButton = Require<Button>("SkipBackButton");
-        _skipForwardButton = Require<Button>("SkipForwardButton");
-        _cropToggle = Require<ToggleButton>("CropToggle");
-        _jumpCropStartButton = Require<Button>("JumpCropStartButton");
-        _setCropStartButton = Require<Button>("SetCropStartButton");
-        _setCropEndButton = Require<Button>("SetCropEndButton");
-        _jumpCropEndButton = Require<Button>("JumpCropEndButton");
-        _masterVolumeSlider = Require<Slider>("MasterVolumeSlider");
-        _masterVolumeText = Require<TextBlock>("MasterVolumeText");
-        _positionText = Require<TextBlock>("PositionText");
-        _speedText = Require<TextBlock>("SpeedText");
-        _mediaNameText = Require<TextBlock>("MediaNameText");
-        _timelineStartLabel = Require<TextBlock>("TimelineStartLabel");
-        _timelineEndLabel = Require<TextBlock>("TimelineEndLabel");
-        _fullscreenTimelineSlider = Require<Slider>("FullscreenTimelineSlider");
-        _fullscreenPlayPauseButton = Require<Button>("FullscreenPlayPauseButton");
-        _fullscreenPositionText = Require<TextBlock>("FullscreenPositionText");
-        _fullscreenDurationText = Require<TextBlock>("FullscreenDurationText");
-        _fullscreenSpeedText = Require<TextBlock>("FullscreenSpeedText");
-        _fullscreenMasterVolumeSlider = Require<Slider>("FullscreenMasterVolumeSlider");
-        _fullscreenMasterVolumeText = Require<TextBlock>("FullscreenMasterVolumeText");
-        _logPathText = Require<TextBlock>("LogPathText");
-        _logTextBox = Require<TextBox>("LogTextBox");
-        _logPump = new UiLogPump(_logTextBox);
-        _cropStartBox = Require<TextBox>("CropStartBox");
-        _cropEndBox = Require<TextBox>("CropEndBox");
-        _cropStartText = Require<TextBlock>("CropStartText");
-        _cropEndText = Require<TextBlock>("CropEndText");
-        _audioTracksPanel = Require<StackPanel>("AudioTracksPanel");
-        _timelineCanvas = Require<Canvas>("TimelineCanvas");
-        _timelineScroller = Require<ScrollViewer>("TimelineScroller");
-        _timelineScroller.AddHandler(PointerWheelChangedEvent, TimelineScrollerOnPointerWheelChanged,
+        var general = SettingsStore.Current.General;
+        DiagnosticLogExpander.IsVisible = general.ShowDiagnosticLog;
+        PlayerAddToQueueButton.IsVisible = general.ShowPlayerQueueButton;
+        _logPump = new UiLogPump(LogTextBox);
+        TimelineScroller.AddHandler(PointerWheelChangedEvent, TimelineScrollerOnPointerWheelChanged,
             RoutingStrategies.Tunnel);
-        _playheadLeftIndicator = Require<Avalonia.Controls.Shapes.Path>("PlayheadLeftIndicator");
-        _playheadRightIndicator = Require<Avalonia.Controls.Shapes.Path>("PlayheadRightIndicator");
 
-        _logPathText.Text = $"Log: {AppLog.LogPath}";
+        LogPathText.Text = $"Log: {AppLog.LogPath}";
         SetCropValues(0, 0);
-        ApplyCropTimeEditingPreference(SettingsStore.Current.General.EditableCropTimes);
+        ApplyCropTimeEditingPreference(general.EditableCropTimes);
 
-        _videoHost.HandleCreated += InitializePlayer;
-        _videoHost.HandleDestroying += DisposePlayer;
-        _videoHost.PointerInput += OnVideoHostPointerInput;
-        _videoBorder.SizeChanged += (_, _) => UpdateFullscreenPopupGeometry();
+        VideoHost.HandleCreated += InitializePlayer;
+        VideoHost.HandleDestroying += DisposePlayer;
+        VideoHost.PointerInput += pointerEvent => PostPointerInput(pointerEvent);
+        VideoBorder.SizeChanged += (_, _) => UpdateFullscreenPopupGeometry();
         SizeChanged += (_, _) => UpdateFullscreenPopupGeometry();
-        _workspaceGrid.SizeChanged += (_, _) => UpdateImportPrompt();
+        WorkspaceGrid.SizeChanged += (_, _) => UpdateImportPrompt();
         Opened += (_, _) => UpdateImportPrompt();
         Activated += (_, _) =>
         {
             FocusPlayer();
         };
-        _playPauseButton.Click += (_, _) => RunPlayerAction(player => player.TogglePauseAsync());
-        _fullscreenButton.Click += (_, _) => ToggleFullscreen();
-        _fullscreenPlayPauseButton.Click += (_, _) =>
+        PlayPauseButton.Click += (_, _) => RunPlayerAction(player => player.TogglePauseAsync());
+        FullscreenButton.Click += (_, _) => ToggleFullscreen();
+        FullscreenPlayPauseButton.Click += (_, _) =>
         {
             ShowFullscreenControls();
             RunPlayerAction(player => player.TogglePauseAsync());
         };
-        _fullscreenTimelineSlider.ValueChanged += FullscreenTimelineSliderOnValueChanged;
-        _fullscreenTimelineSlider.PointerPressed += FullscreenTimelineSliderOnPointerPressed;
-        _fullscreenTimelineSlider.PointerReleased += FullscreenTimelineSliderOnPointerReleased;
-        _fullscreenTimelineSlider.PointerCaptureLost += FullscreenTimelineSliderOnPointerCaptureLost;
-        _fullscreenControlsPopup.AddHandler(KeyDownEvent, MainWindowOnKeyDown, RoutingStrategies.Tunnel);
-        _fullscreenControlsBar.AddHandler(KeyDownEvent, MainWindowOnKeyDown, RoutingStrategies.Tunnel);
-        _fullscreenControlsBar.SizeChanged += (_, _) => UpdateFullscreenPopupGeometry();
-        _fullscreenControlsBar.AddHandler(PointerWheelChangedEvent, FullscreenControlsBarOnPointerWheelChanged,
+        FullscreenTimelineSlider.ValueChanged += FullscreenTimelineSliderOnValueChanged;
+        FullscreenTimelineSlider.PointerPressed += FullscreenTimelineSliderOnPointerPressed;
+        FullscreenTimelineSlider.PointerReleased += FullscreenTimelineSliderOnPointerReleased;
+        FullscreenTimelineSlider.PointerCaptureLost += FullscreenTimelineSliderOnPointerCaptureLost;
+        FullscreenControlsPopup.AddHandler(KeyDownEvent, MainWindowOnKeyDown, RoutingStrategies.Tunnel);
+        FullscreenControlsBar.AddHandler(KeyDownEvent, MainWindowOnKeyDown, RoutingStrategies.Tunnel);
+        FullscreenControlsBar.SizeChanged += (_, _) => UpdateFullscreenPopupGeometry();
+        FullscreenControlsBar.AddHandler(PointerWheelChangedEvent, FullscreenControlsBarOnPointerWheelChanged,
             RoutingStrategies.Bubble, handledEventsToo: true);
-        _muteAllButton.Click += (_, _) => ToggleMasterMute();
-        _skipBackButton.Click += (_, _) => Skip(-5);
-        _skipForwardButton.Click += (_, _) => Skip(5);
-        _jumpCropStartButton.Click += (_, _) => RunPlayerAction(player => player.SeekAsync(_cropStart));
-        _jumpCropEndButton.Click += (_, _) => RunPlayerAction(player => player.SeekAsync(_cropEnd));
-        _setCropStartButton.Click += (_, _) => SetCropStartToCurrent();
-        _setCropEndButton.Click += (_, _) => SetCropEndToCurrent();
-        _cropToggle.IsCheckedChanged += CropToggleOnCheckedChanged;
-        _masterVolumeSlider.ValueChanged += MasterVolumeOnValueChanged;
-        _fullscreenMasterVolumeSlider.ValueChanged += MasterVolumeOnValueChanged;
-        ConfigureMasterVolumeSlider(_masterVolumeSlider);
-        ConfigureMasterVolumeSlider(_fullscreenMasterVolumeSlider);
-        _cropStartBox.KeyDown += CropTimeBoxOnKeyDown;
-        _cropEndBox.KeyDown += CropTimeBoxOnKeyDown;
-        _cropStartBox.LostFocus += (_, _) => CommitCropTimeBox(_cropStartBox);
-        _cropEndBox.LostFocus += (_, _) => CommitCropTimeBox(_cropEndBox);
-        _workspaceTabs.SelectionChanged += async (_, _) =>
+        MuteAllButton.Click += (_, _) => ToggleMasterMute();
+        SkipBackButton.Click += (_, _) => Skip(-5);
+        SkipForwardButton.Click += (_, _) => Skip(5);
+        JumpCropStartButton.Click += (_, _) => RunPlayerAction(player => player.SeekAsync(_cropStart));
+        JumpCropEndButton.Click += (_, _) => RunPlayerAction(player => player.SeekAsync(_cropEnd));
+        SetCropStartButton.Click += (_, _) => SetCropStartToCurrent();
+        SetCropEndButton.Click += (_, _) => SetCropEndToCurrent();
+        CropToggle.IsCheckedChanged += CropToggleOnCheckedChanged;
+        MasterVolumeSlider.ValueChanged += MasterVolumeOnValueChanged;
+        FullscreenMasterVolumeSlider.ValueChanged += MasterVolumeOnValueChanged;
+        ConfigureMasterVolumeSlider(MasterVolumeSlider);
+        ConfigureMasterVolumeSlider(FullscreenMasterVolumeSlider);
+        CropStartBox.KeyDown += CropTimeBoxOnKeyDown;
+        CropEndBox.KeyDown += CropTimeBoxOnKeyDown;
+        CropStartBox.LostFocus += (_, _) => CommitCropTimeBox(CropStartBox);
+        CropEndBox.LostFocus += (_, _) => CommitCropTimeBox(CropEndBox);
+        WorkspaceTabs.SelectionChanged += async (_, _) =>
         {
-            if (!_updatingTabs) await SelectWorkspaceTabAsync(_workspaceTabs.SelectedIndex == 1);
+            if (!_updatingTabs) await SelectWorkspaceTabAsync(WorkspaceTabs.SelectedIndex == 1);
         };
-        _exportView.StatusUpdated += UpdateExportTabHeader;
-        _exportView.Attach(_exportManager);
+        ExportPanel.StatusUpdated += UpdateExportTabHeader;
+        ExportPanel.Attach(_exportManager);
         AddHandler(KeyDownEvent, MainWindowOnKeyDown, RoutingStrategies.Tunnel);
         AppLog.MessageWritten += OnLogMessage;
 
         _uiTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(200), DispatcherPriority.Background, UpdatePlaybackUi);
-        _uiTimer.Start();
         _mixTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(140), DispatcherPriority.Background, ApplyPendingMix)
         {
             IsEnabled = false
@@ -298,9 +185,6 @@ public sealed partial class MainWindow : Window
         };
     }
 
-    private T Require<T>(string name) where T : Control =>
-        this.FindControl<T>(name) ?? throw new InvalidOperationException($"Required control '{name}' was not found.");
-
     private async void InitializePlayer(IntPtr handle, string descriptor)
     {
         var hostGeneration = ++_hostGeneration;
@@ -326,18 +210,15 @@ public sealed partial class MainWindow : Window
                     ShowError(error.Message);
                 }
             });
-            player.PointerInput += input => Dispatcher.UIThread.Post(() =>
-            {
-                if (ReferenceEquals(_player, player) && !_closing) HandlePlaybackPointerInput(input);
-            }, DispatcherPriority.Input);
-            await player.SetMasterVolumeAsync(_masterVolumeSlider.Value);
+            player.PointerInput += input => PostPointerInput(input, player);
+            await player.SetMasterVolumeAsync(MasterVolumeSlider.Value);
             await player.SetLoopingAsync(SettingsStore.Current.General.LoopByDefault);
             if (!ReferenceEquals(_player, player) || _closing) return;
             _uiTimer.Start();
-            _openMenuItem.IsEnabled = _importPrompt.IsEnabled = true;
+            OpenMenuItem.IsEnabled = ImportPrompt.IsEnabled = true;
             UpdateImportPrompt();
             FocusPlayer();
-            _fullscreenMasterVolumeSlider.IsEnabled = true;
+            FullscreenMasterVolumeSlider.IsEnabled = true;
             AppLog.Info("Playback component initialized and ready.");
             if (_currentFilePath is { } path) LoadVideoCore(path, restorePlayback: true);
         }
@@ -374,72 +255,75 @@ public sealed partial class MainWindow : Window
         }, DispatcherPriority.Input);
     }
 
-    private void OnPlaybackPointerInput(PlaybackPointerEvent pointerEvent) =>
-        Dispatcher.UIThread.Post(() => { if (!_closing && !_closed) HandlePlaybackPointerInput(pointerEvent); }, DispatcherPriority.Input);
-
-    private void OnVideoHostPointerInput(PlaybackPointerEvent pointerEvent) =>
-        OnPlaybackPointerInput(pointerEvent);
+    // Pointer input arrives from the Windows host bridge or the mpv Lua bridge,
+    // off the UI thread. Input from a replaced engine is ignored.
+    private void PostPointerInput(PlaybackPointerEvent pointerEvent, IPlaybackEngine? source = null) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_closing || _closed || (source is not null && !ReferenceEquals(_player, source))) return;
+            HandlePlaybackPointerInput(pointerEvent);
+        }, DispatcherPriority.Input);
 
     private void HandlePlaybackPointerInput(PlaybackPointerEvent pointerEvent)
     {
-            if (_exportTabSelected) return;
-            if (pointerEvent.Kind == PlaybackPointerEventKind.DoubleClick)
-            {
-                var canToggleFullscreen = CanUseFullscreen || _isFullscreen;
-                AppLog.Info($"Video double-click received: fullscreen={_isFullscreen}; fullscreen-available={canToggleFullscreen}");
-                if (canToggleFullscreen)
-                    ToggleFullscreen();
-                return;
-            }
+        if (_exportTabSelected) return;
+        if (pointerEvent.Kind == PlaybackPointerEventKind.DoubleClick)
+        {
+            var canToggleFullscreen = CanUseFullscreen || _isFullscreen;
+            AppLog.Info($"Video double-click received: fullscreen={_isFullscreen}; fullscreen-available={canToggleFullscreen}");
+            if (canToggleFullscreen)
+                ToggleFullscreen();
+            return;
+        }
 
-            // The native mpv surface owns pointer input, so a wheel event here
-            // means the pointer is over the video play area in normal mode.
-            if (!_isFullscreen && pointerEvent.Kind == PlaybackPointerEventKind.Wheel)
-            {
-                AdjustMasterVolume(pointerEvent.WheelDelta);
-                return;
-            }
+        // The native mpv surface owns pointer input, so a wheel event here
+        // means the pointer is over the video play area in normal mode.
+        if (!_isFullscreen && pointerEvent.Kind == PlaybackPointerEventKind.Wheel)
+        {
+            AdjustMasterVolume(pointerEvent.WheelDelta);
+            return;
+        }
 
-            if (!_isFullscreen)
-                return;
+        if (!_isFullscreen)
+            return;
 
-            if (pointerEvent.Kind is PlaybackPointerEventKind.Move or PlaybackPointerEventKind.Enter or PlaybackPointerEventKind.Wheel)
-                ShowFullscreenCursor();
+        if (pointerEvent.Kind is PlaybackPointerEventKind.Move or PlaybackPointerEventKind.Enter or PlaybackPointerEventKind.Wheel)
+            ShowFullscreenCursor();
 
-            if (pointerEvent.Kind == PlaybackPointerEventKind.Wheel)
-            {
-                UpdateFullscreenPointerRevealZone(pointerEvent.Y, pointerEvent.SurfaceHeight);
-                BeginFullscreenScrollControlsGrace();
-                AdjustMasterVolume(pointerEvent.WheelDelta);
-                ShowFullscreenControls();
-                return;
-            }
+        if (pointerEvent.Kind == PlaybackPointerEventKind.Wheel)
+        {
+            UpdateFullscreenPointerRevealZone(pointerEvent.Y, pointerEvent.SurfaceHeight);
+            BeginFullscreenScrollControlsGrace();
+            AdjustMasterVolume(pointerEvent.WheelDelta);
+            ShowFullscreenControls();
+            return;
+        }
 
-            if (pointerEvent.Kind == PlaybackPointerEventKind.RightClick)
-            {
-                ShowFullscreenCursor();
-                ShowFullscreenControls();
-                RunPlayerAction(player => player.TogglePauseAsync());
-                return;
-            }
+        if (pointerEvent.Kind == PlaybackPointerEventKind.RightClick)
+        {
+            ShowFullscreenCursor();
+            ShowFullscreenControls();
+            RunPlayerAction(player => player.TogglePauseAsync());
+            return;
+        }
 
-            if (pointerEvent.Kind is not (PlaybackPointerEventKind.Move or PlaybackPointerEventKind.Enter))
-                return;
+        if (pointerEvent.Kind is not (PlaybackPointerEventKind.Move or PlaybackPointerEventKind.Enter))
+            return;
 
-            var isInRevealZone = pointerEvent.SurfaceHeight > 0 &&
-                                 pointerEvent.Y >= pointerEvent.SurfaceHeight * (1 - FullscreenPointerRevealZoneRatio);
-            _isPointerInFullscreenRevealZone = isInRevealZone;
-            if (_fullscreenScrollGraceActive)
-            {
-                if (isInRevealZone)
-                    ShowFullscreenControls();
-                return;
-            }
-
+        var isInRevealZone = pointerEvent.SurfaceHeight > 0 &&
+                             pointerEvent.Y >= pointerEvent.SurfaceHeight * (1 - FullscreenPointerRevealZoneRatio);
+        _isPointerInFullscreenRevealZone = isInRevealZone;
+        if (_fullscreenScrollGraceActive)
+        {
             if (isInRevealZone)
                 ShowFullscreenControls();
-            else
-                HideFullscreenControls();
+            return;
+        }
+
+        if (isInRevealZone)
+            ShowFullscreenControls();
+        else
+            HideFullscreenControls();
     }
 
     private async void OpenButtonOnClick(object? sender, RoutedEventArgs eventArgs)
@@ -479,18 +363,18 @@ public sealed partial class MainWindow : Window
     private void UpdateImportPrompt()
     {
         // Visibility does not detach the native host or recreate its player.
-        _videoHost.IsVisible = !string.IsNullOrWhiteSpace(_currentFilePath);
+        VideoHost.IsVisible = !string.IsNullOrWhiteSpace(_currentFilePath);
         var show = IsVisible && !_closing && !_closed && !_preferencesOpen &&
-                   !_isFullscreen && string.IsNullOrWhiteSpace(_currentFilePath) && _workspaceGrid.Bounds.Width > 0;
-        var wasVisible = _importPrompt.IsVisible;
-        _importPrompt.IsVisible = show;
+                   !_isFullscreen && string.IsNullOrWhiteSpace(_currentFilePath) && WorkspaceGrid.Bounds.Width > 0;
+        var wasVisible = ImportPrompt.IsVisible;
+        ImportPrompt.IsVisible = show;
         if (show && !wasVisible) FocusPlayer();
     }
 
     // A neutral focus target keeps playback keys out of buttons, sliders and native popups.
     private void FocusPlayer() => Dispatcher.UIThread.Post(() =>
     {
-        if (IsActive && !_exportTabSelected && !_preferencesOpen && !_closing) _rootGrid.Focus();
+        if (IsActive && !_exportTabSelected && !_preferencesOpen && !_closing) RootGrid.Focus();
     }, DispatcherPriority.Loaded);
 
     private void LoadVideo(string path) => LoadVideoCore(path, restorePlayback: false);
@@ -509,20 +393,20 @@ public sealed partial class MainWindow : Window
             if (!System.IO.File.Exists(path)) throw new System.IO.FileNotFoundException("The selected media file does not exist.", path);
             FlushAudioPreset();
             _mixTimer.Stop();
-            _audioTracksPanel.IsEnabled = false;
-            _audioTracksPanel.Children.Clear();
-            _muteAllButton.IsEnabled = false;
+            AudioTracksPanel.IsEnabled = false;
+            AudioTracksPanel.Children.Clear();
+            MuteAllButton.IsEnabled = false;
             var fullPath = System.IO.Path.GetFullPath(path);
             if (!restorePlayback) _resumeSnapshot = null;
             _currentFilePath = fullPath;
-            _mediaNameText.Text = System.IO.Path.GetFileName(_currentFilePath);
-            _errorBanner.IsVisible = false;
+            MediaNameText.Text = System.IO.Path.GetFileName(_currentFilePath);
+            ErrorBanner.IsVisible = false;
             HidePlayerQueueStatus();
             UpdateImportPrompt();
             SetMediaControlsEnabled(false);
             ResetTimeline();
-            _cropToggle.IsChecked = false;
-            _exportView.SetContext(new());
+            CropToggle.IsChecked = false;
+            ExportPanel.SetContext(new());
             var snapshot = player.GetSnapshot();
             var paused = restorePlayback && _resumeSnapshot is { } resume ? resume.IsPaused :
                 IsPreparingMedia(player) ? _preparingMedia!.Value.Paused : snapshot.IsLoaded && snapshot.IsPaused;
@@ -549,11 +433,11 @@ public sealed partial class MainWindow : Window
 
     private void PlayerAddToQueueOnClick(object? sender, RoutedEventArgs eventArgs)
     {
-        if (!_playerAddToQueueButton.IsEnabled || _closing || _closed) return;
-        if (_exportView.TryAddToQueue(CaptureExportContext(), out var message))
+        if (!PlayerAddToQueueButton.IsEnabled || _closing || _closed) return;
+        if (ExportPanel.TryAddToQueue(CaptureExportContext(), out var message))
         {
             ShowPlayerQueueStatus(message);
-            _errorBanner.IsVisible = false;
+            ErrorBanner.IsVisible = false;
         }
         else
         {
@@ -566,9 +450,9 @@ public sealed partial class MainWindow : Window
     {
         _playerQueueStatusTimer.Stop();
         _isPlayerQueueStatusFading = false;
-        _playerQueueStatusText.Text = message;
-        _playerQueueStatusText.IsVisible = true;
-        _playerQueueStatusText.Opacity = 1;
+        PlayerQueueStatusText.Text = message;
+        PlayerQueueStatusText.IsVisible = true;
+        PlayerQueueStatusText.Opacity = 1;
         _playerQueueStatusTimer.Interval = PlayerQueueStatusHoldDuration;
         _playerQueueStatusTimer.Start();
     }
@@ -583,7 +467,7 @@ public sealed partial class MainWindow : Window
         }
 
         _isPlayerQueueStatusFading = true;
-        _playerQueueStatusText.Opacity = 0;
+        PlayerQueueStatusText.Opacity = 0;
         _playerQueueStatusTimer.Interval = PlayerQueueStatusFadeDuration;
         _playerQueueStatusTimer.Start();
     }
@@ -592,8 +476,8 @@ public sealed partial class MainWindow : Window
     {
         _playerQueueStatusTimer.Stop();
         _isPlayerQueueStatusFading = false;
-        _playerQueueStatusText.IsVisible = false;
-        _playerQueueStatusText.Opacity = 0;
+        PlayerQueueStatusText.IsVisible = false;
+        PlayerQueueStatusText.Opacity = 0;
     }
 
     private ExportContext CaptureExportContext()
@@ -603,9 +487,9 @@ public sealed partial class MainWindow : Window
         return new ExportContext
         {
             SourcePath = _currentFilePath,
-            CropEnabled = _cropToggle.IsChecked == true,
-            Start = _cropToggle.IsChecked == true ? _cropStart : 0,
-            End = _cropToggle.IsChecked == true ? _cropEnd : 0,
+            CropEnabled = CropToggle.IsChecked == true,
+            Start = CropToggle.IsChecked == true ? _cropStart : 0,
+            End = CropToggle.IsChecked == true ? _cropEnd : 0,
             Duration = _durationSeconds,
             PlaybackSpeed = _player.GetSnapshot().PlaybackSpeed,
             Tracks = _player.AudioTracks.ToArray()
@@ -619,13 +503,13 @@ public sealed partial class MainWindow : Window
         var changed = _exportTabSelected != export;
         _exportTabSelected = export;
         _updatingTabs = true;
-        try { _workspaceTabs.SelectedIndex = export ? 1 : 0; }
+        try { WorkspaceTabs.SelectedIndex = export ? 1 : 0; }
         finally { _updatingTabs = false; }
-        _videoBorder.IsVisible = !export;
-        _playerSidebar.IsVisible = !export && !_isFullscreen;
-        _normalPlaybackArea.IsVisible = !export && !_isFullscreen;
-        _exportView.IsVisible = export;
-        if (export) _exportView.SetContext(CaptureExportContext());
+        VideoBorder.IsVisible = !export;
+        PlayerSidebar.IsVisible = !export && !_isFullscreen;
+        NormalPlaybackArea.IsVisible = !export && !_isFullscreen;
+        ExportPanel.IsVisible = export;
+        if (export) ExportPanel.SetContext(CaptureExportContext());
         else FocusPlayer();
         if (!changed) return;
         try
@@ -650,21 +534,21 @@ public sealed partial class MainWindow : Window
 
     private void UpdateExportTabHeader(ExportManagerSnapshot snapshot)
     {
-        _playerAddToQueueButton.IsEnabled = !_closing && !_closed && !snapshot.IsStopping &&
-            _player is not null && _playPauseButton.IsEnabled;
+        PlayerAddToQueueButton.IsEnabled = !_closing && !_closed && !snapshot.IsStopping &&
+            _player is not null && PlayPauseButton.IsEnabled;
         var details = new List<string>();
         if (snapshot.Active is { } active) details.Add($"{active.Progress:0}%");
         if (snapshot.WaitingCount > 0) details.Add($"{snapshot.WaitingCount} waiting");
         if (snapshot.QueuePaused) details.Add("paused");
         if (snapshot.FailedCount > 0) details.Add($"{snapshot.FailedCount} failed");
         var text = details.Count == 0 ? "Export" : $"Export · {string.Join(" · ", details)}";
-        if (!Equals(_exportTabHeader.Content, text)) _exportTabHeader.Content = text;
+        if (!Equals(ExportTabHeader.Content, text)) ExportTabHeader.Content = text;
     }
 
     private async void PreferencesButtonOnClick(object? sender, RoutedEventArgs eventArgs)
     {
         _preferencesOpen = true;
-        _importPrompt.IsVisible = false;
+        ImportPrompt.IsVisible = false;
         try
         {
             if (await new PreferencesWindow().ShowDialog<bool>(this)) ApplyPreferences();
@@ -675,38 +559,38 @@ public sealed partial class MainWindow : Window
     internal void ApplyPreferences()
     {
         var general = SettingsStore.Current.General;
-        _diagnosticLogExpander.IsVisible = general.ShowDiagnosticLog;
-        _playerAddToQueueButton.IsVisible = general.ShowPlayerQueueButton;
+        DiagnosticLogExpander.IsVisible = general.ShowDiagnosticLog;
+        PlayerAddToQueueButton.IsVisible = general.ShowPlayerQueueButton;
         ApplyCropTimeEditingPreference(general.EditableCropTimes);
         if (!general.ShowPlayerQueueButton) HidePlayerQueueStatus();
-        if (!general.ShowDiagnosticLog) _diagnosticLogExpander.IsExpanded = false;
+        if (!general.ShowDiagnosticLog) DiagnosticLogExpander.IsExpanded = false;
         RunPlayerAction(player => player.SetLoopingAsync(general.LoopByDefault));
     }
 
     private void ApplyCropTimeEditingPreference(bool editable)
     {
-        foreach (var box in new[] { _cropStartBox, _cropEndBox })
+        foreach (var box in new[] { CropStartBox, CropEndBox })
         {
             if (!editable && box.IsFocused)
             {
                 CommitCropTimeBox(box);
-                _rootGrid.Focus();
+                RootGrid.Focus();
             }
             box.IsReadOnly = !editable;
             // These local values override the player's non-focusable control styles.
             box.Focusable = box.IsTabStop = editable;
             box.IsVisible = editable;
         }
-        _cropStartText.IsVisible = _cropEndText.IsVisible = !editable;
+        CropStartText.IsVisible = CropEndText.IsVisible = !editable;
     }
 
     private void SetMediaControlsEnabled(bool enabled)
     {
-        _playPauseButton.IsEnabled = _fullscreenPlayPauseButton.IsEnabled = enabled;
-        _timelineCanvas.IsEnabled = _fullscreenTimelineSlider.IsEnabled = enabled;
-        _fullscreenButton.IsEnabled = _cropToggle.IsEnabled = enabled;
-        _skipBackButton.IsEnabled = _skipForwardButton.IsEnabled = enabled;
-        _playerAddToQueueButton.IsEnabled = enabled && !_closing && !_exportManager.GetSnapshot().IsStopping;
+        PlayPauseButton.IsEnabled = FullscreenPlayPauseButton.IsEnabled = enabled;
+        TimelineCanvas.IsEnabled = FullscreenTimelineSlider.IsEnabled = enabled;
+        FullscreenButton.IsEnabled = CropToggle.IsEnabled = enabled;
+        SkipBackButton.IsEnabled = SkipForwardButton.IsEnabled = enabled;
+        PlayerAddToQueueButton.IsEnabled = enabled && !_closing && !_exportManager.GetSnapshot().IsStopping;
     }
 
     private void OnMediaLoaded(IPlaybackEngine player, long generation)
@@ -731,14 +615,14 @@ public sealed partial class MainWindow : Window
                 paused = resume?.IsPaused ?? paused;
                 if (_exportTabSelected)
                 {
-                    _exportView.SetContext(CaptureExportContext());
+                    ExportPanel.SetContext(CaptureExportContext());
                     _tabResumePlayback = !paused ? (player, generation) : null;
                     paused = true;
                 }
                 await player.SetPausedAsync(paused);
                 if (!IsCurrentMedia(player, generation)) return;
                 _preparingMedia = null;
-                _audioTracksPanel.IsEnabled = true;
+                AudioTracksPanel.IsEnabled = true;
                 UpdatePlaybackUi();
                 SetMediaControlsEnabled(_durationSeconds > 0);
                 UpdateImportPrompt();
@@ -757,13 +641,13 @@ public sealed partial class MainWindow : Window
 
     private void BuildAudioTrackControls()
     {
-        _audioTracksPanel.Children.Clear();
+        AudioTracksPanel.Children.Clear();
         var tracks = _player?.AudioTracks ?? Array.Empty<AudioTrack>();
-        _muteAllButton.IsEnabled = tracks.Count > 0;
+        MuteAllButton.IsEnabled = tracks.Count > 0;
 
         if (tracks.Count == 0)
         {
-            _audioTracksPanel.Children.Add(new TextBlock
+            AudioTracksPanel.Children.Add(new TextBlock
             {
                 Text = "No audio tracks discovered. Video remains available and audio is muted.",
                 Foreground = UiTheme.Resource<IBrush>("TextMuted"),
@@ -778,7 +662,7 @@ public sealed partial class MainWindow : Window
             enabled.IsCheckedChanged += (_, _) =>
             {
                 track.Enabled = enabled.IsChecked == true;
-                QueueMixUpdate(immediate: false);
+                QueueMixUpdate();
                 QueueAudioPresetSave();
             };
 
@@ -794,80 +678,11 @@ public sealed partial class MainWindow : Window
             {
                 track.VolumePercent = args.NewValue;
                 volumeValue.Text = $"{track.VolumePercent:0}%";
-                QueueMixUpdate(immediate: false);
+                QueueMixUpdate();
                 QueueAudioPresetSave();
             };
 
-            var volumeTooltipText = new TextBlock
-            {
-                Foreground = UiTheme.Resource<IBrush>("TextPrimary"),
-                FontWeight = FontWeight.SemiBold
-            };
-            var tooltipOpenTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(500)
-            };
-            var lastTooltipPointerPosition = new Point();
-            var volumeTooltip = new Popup
-            {
-                PlacementTarget = volume,
-                Placement = PlacementMode.Top,
-                PlacementConstraintAdjustment = PopupPositionerConstraintAdjustment.SlideX,
-                VerticalOffset = -4,
-                Child = new Border
-                {
-                    Background = UiTheme.Resource<IBrush>("ControlBackground"),
-                    BorderBrush = UiTheme.Resource<IBrush>("PanelBorder"),
-                    BorderThickness = new Thickness(0),
-                    CornerRadius = new CornerRadius(0),
-                    Padding = new Thickness(9, 5),
-                    IsHitTestVisible = false,
-                    Child = volumeTooltipText
-                }
-            };
-            tooltipOpenTimer.Tick += (_, _) =>
-            {
-                tooltipOpenTimer.Stop();
-                if (volume.IsPointerOver)
-                    ShowVolumeTooltip(volume, volumeTooltip, volumeTooltipText, lastTooltipPointerPosition);
-            };
-            volume.DetachedFromVisualTree += (_, _) => { tooltipOpenTimer.Stop(); volumeTooltip.IsOpen = false; };
-            volume.PointerEntered += (_, args) =>
-            {
-                lastTooltipPointerPosition = args.GetPosition(volume);
-                UpdateVolumeTooltipValue(volume, volumeTooltipText, lastTooltipPointerPosition);
-                tooltipOpenTimer.Stop();
-                tooltipOpenTimer.Start();
-            };
-            volume.PointerMoved += (_, args) =>
-            {
-                lastTooltipPointerPosition = args.GetPosition(volume);
-                if (volumeTooltip.IsOpen)
-                    ShowVolumeTooltip(volume, volumeTooltip, volumeTooltipText, lastTooltipPointerPosition);
-                else
-                    UpdateVolumeTooltipValue(volume, volumeTooltipText, lastTooltipPointerPosition);
-            };
-            volume.PointerExited += (_, _) =>
-            {
-                tooltipOpenTimer.Stop();
-                volumeTooltip.IsOpen = false;
-            };
-
-            ConfigureVolumeSliderDragging(volume);
-
-            volume.AddHandler(PointerWheelChangedEvent, (_, args) =>
-            {
-                if (!volume.IsPointerOver)
-                    return;
-
-                var direction = Math.Sign(args.Delta.Y);
-                if (direction == 0)
-                    return;
-
-                volume.Value = Math.Clamp(Math.Round(volume.Value) + direction, volume.Minimum, volume.Maximum);
-                volumeTooltipText.Text = $"{volume.Value:0}%";
-                args.Handled = true;
-            }, RoutingStrategies.Bubble, handledEventsToo: true);
+            VolumeSliderBehavior.Attach(volume);
 
             var volumeRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8 };
             volumeRow.Children.Add(volume);
@@ -877,97 +692,8 @@ public sealed partial class MainWindow : Window
             var trackPanel = new StackPanel { Spacing = 3 };
             trackPanel.Children.Add(enabled);
             trackPanel.Children.Add(volumeRow);
-            _audioTracksPanel.Children.Add(trackPanel);
+            AudioTracksPanel.Children.Add(trackPanel);
         }
-    }
-
-    private static void ShowVolumeTooltip(Slider volume, Popup tooltip, TextBlock tooltipText, Point pointerPosition)
-    {
-        if (volume.Bounds.Width <= 0)
-            return;
-
-        UpdateVolumeTooltipValue(volume, tooltipText, pointerPosition);
-        // Keep the popup anchored to the slider's bottom edge. Only its X position
-        // follows the pointer, so small vertical pointer movements do not make the
-        // preview jump around.
-        tooltip.HorizontalOffset = pointerPosition.X - volume.Bounds.Width / 2;
-        tooltip.IsOpen = true;
-    }
-
-    private static void UpdateVolumeTooltipValue(Slider volume, TextBlock tooltipText, Point pointerPosition) =>
-        tooltipText.Text = $"{VolumeForPointer(volume, pointerPosition.X):0}%";
-
-    private static double VolumeForPointer(Slider volume, double pointerX)
-    {
-        if (volume.Bounds.Width <= 0)
-            return volume.Value;
-
-        var ratio = Math.Clamp(pointerX / volume.Bounds.Width, 0, 1);
-        var value = volume.Minimum + ratio * (volume.Maximum - volume.Minimum);
-        return Math.Round(value, MidpointRounding.AwayFromZero);
-    }
-
-    private static void ConfigureVolumeSliderDragging(Slider volume, Action<bool>? dragChanged = null)
-    {
-        IPointer? dragPointer = null;
-
-        void EndDrag()
-        {
-            var pointer = dragPointer;
-            if (pointer is null)
-                return;
-
-            dragPointer = null;
-            if (ReferenceEquals(pointer.Captured, volume))
-                pointer.Capture(null);
-            dragChanged?.Invoke(false);
-        }
-
-        // Handle presses on both the track and thumb ourselves so a track click
-        // can continue into a drag using the same percentage calculation.
-        volume.AddHandler(PointerPressedEvent, (_, args) =>
-        {
-            if (dragPointer is not null || !args.GetCurrentPoint(volume).Properties.IsLeftButtonPressed)
-                return;
-
-            dragPointer = args.Pointer;
-            args.Pointer.Capture(volume);
-            volume.Value = VolumeForPointer(volume, args.GetPosition(volume).X);
-            dragChanged?.Invoke(true);
-            args.Handled = true;
-        }, RoutingStrategies.Tunnel, handledEventsToo: true);
-
-        volume.AddHandler(PointerMovedEvent, (_, args) =>
-        {
-            if (!ReferenceEquals(dragPointer, args.Pointer))
-                return;
-
-            if (!args.GetCurrentPoint(volume).Properties.IsLeftButtonPressed)
-            {
-                EndDrag();
-                return;
-            }
-
-            volume.Value = VolumeForPointer(volume, args.GetPosition(volume).X);
-            dragChanged?.Invoke(true);
-        }, RoutingStrategies.Bubble, handledEventsToo: true);
-
-        volume.AddHandler(PointerReleasedEvent, (_, args) =>
-        {
-            if (!ReferenceEquals(dragPointer, args.Pointer) || args.InitialPressMouseButton != MouseButton.Left)
-                return;
-
-            volume.Value = VolumeForPointer(volume, args.GetPosition(volume).X);
-            EndDrag();
-            args.Handled = true;
-        }, RoutingStrategies.Tunnel, handledEventsToo: true);
-
-        volume.PointerCaptureLost += (_, args) =>
-        {
-            if (ReferenceEquals(dragPointer, args.Pointer))
-                EndDrag();
-        };
-        volume.DetachedFromVisualTree += (_, _) => EndDrag();
     }
 
     private void ToggleMasterMute()
@@ -975,23 +701,23 @@ public sealed partial class MainWindow : Window
         if (_player is null)
             return;
 
-        _masterVolumeSlider.Value = _masterVolumeSlider.Value > 0 ? 0 : _lastPositiveMasterVolume;
+        MasterVolumeSlider.Value = MasterVolumeSlider.Value > 0 ? 0 : _lastPositiveMasterVolume;
     }
 
-    private bool RestoreAudioPreset()
+    private void RestoreAudioPreset()
     {
         var tracks = _player?.AudioTracks;
         if (tracks is null || tracks.Count == 0)
-            return false;
+            return;
 
         var preset = SettingsStore.FindAudioTrackPreset(tracks.Count);
         if (preset is null)
-            return false;
+            return;
 
         if (preset.Tracks is null || preset.TrackCount != tracks.Count || preset.Tracks.Count != tracks.Count)
         {
             AppLog.Warn($"Ignoring audio preset for {tracks.Count} tracks because its settings are missing or have the wrong count.");
-            return false;
+            return;
         }
 
         for (var index = 0; index < tracks.Count; index++)
@@ -1000,7 +726,7 @@ public sealed partial class MainWindow : Window
             if (savedTrack is null || !double.IsFinite(savedTrack.VolumePercent))
             {
                 AppLog.Warn($"Ignoring audio preset for {tracks.Count} tracks because track {index + 1} has an invalid volume.");
-                return false;
+                return;
             }
         }
 
@@ -1012,7 +738,6 @@ public sealed partial class MainWindow : Window
         }
 
         AppLog.Info($"Restored audio preset for {tracks.Count} tracks.");
-        return true;
     }
 
     private void QueueAudioPresetSave()
@@ -1022,11 +747,7 @@ public sealed partial class MainWindow : Window
             _audioPresetTimer.Start();
     }
 
-    private void SavePendingAudioPreset(object? sender, EventArgs eventArgs)
-    {
-        _audioPresetTimer.Stop();
-        SaveCurrentAudioPreset();
-    }
+    private void SavePendingAudioPreset(object? sender, EventArgs eventArgs) => FlushAudioPreset();
 
     private void FlushAudioPreset()
     {
@@ -1059,13 +780,10 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void QueueMixUpdate(bool immediate)
+    private void QueueMixUpdate()
     {
         _mixTimer.Stop();
-        if (immediate)
-            RunPlayerAction(player => player.ApplyAudioMixAsync());
-        else
-            _mixTimer.Start();
+        _mixTimer.Start();
     }
 
     private void ApplyPendingMix(object? sender, EventArgs eventArgs)
@@ -1076,34 +794,6 @@ public sealed partial class MainWindow : Window
 
     private void ConfigureMasterVolumeSlider(Slider volume)
     {
-        var volumeTooltipText = new TextBlock
-        {
-            Foreground = UiTheme.Resource<IBrush>("TextPrimary"),
-            FontWeight = FontWeight.SemiBold
-        };
-        var tooltipOpenTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(500)
-        };
-        var lastTooltipPointerPosition = new Point();
-        var volumeTooltip = new Popup
-        {
-            PlacementTarget = volume,
-            Placement = PlacementMode.Top,
-            PlacementConstraintAdjustment = PopupPositionerConstraintAdjustment.SlideX,
-            VerticalOffset = -4,
-            Child = new Border
-            {
-                Background = UiTheme.Resource<IBrush>("ControlBackground"),
-                BorderBrush = UiTheme.Resource<IBrush>("PanelBorder"),
-                BorderThickness = new Thickness(0),
-                CornerRadius = new CornerRadius(0),
-                Padding = new Thickness(9, 5),
-                IsHitTestVisible = false,
-                Child = volumeTooltipText
-            }
-        };
-
         void RefreshFullscreenControls()
         {
             if (_isFullscreen)
@@ -1113,62 +803,23 @@ public sealed partial class MainWindow : Window
             }
         }
 
-        tooltipOpenTimer.Tick += (_, _) =>
-        {
-            tooltipOpenTimer.Stop();
-            if (volume.IsPointerOver)
-                ShowVolumeTooltip(volume, volumeTooltip, volumeTooltipText, lastTooltipPointerPosition);
-        };
-        volume.DetachedFromVisualTree += (_, _) => { tooltipOpenTimer.Stop(); volumeTooltip.IsOpen = false; };
-        volume.PointerEntered += (_, args) =>
-        {
-            lastTooltipPointerPosition = args.GetPosition(volume);
-            UpdateVolumeTooltipValue(volume, volumeTooltipText, lastTooltipPointerPosition);
-            tooltipOpenTimer.Stop();
-            tooltipOpenTimer.Start();
-            RefreshFullscreenControls();
-        };
-        volume.PointerMoved += (_, args) =>
-        {
-            lastTooltipPointerPosition = args.GetPosition(volume);
-            if (volumeTooltip.IsOpen)
-                ShowVolumeTooltip(volume, volumeTooltip, volumeTooltipText, lastTooltipPointerPosition);
-            else
-                UpdateVolumeTooltipValue(volume, volumeTooltipText, lastTooltipPointerPosition);
-            RefreshFullscreenControls();
-        };
-        volume.PointerExited += (_, _) =>
-        {
-            tooltipOpenTimer.Stop();
-            volumeTooltip.IsOpen = false;
-        };
-
-        ConfigureVolumeSliderDragging(volume, dragging =>
-        {
-            if (ReferenceEquals(volume, _fullscreenMasterVolumeSlider))
-                _isFullscreenVolumePointerDown = dragging;
-            RefreshFullscreenControls();
-        });
-
-        volume.AddHandler(PointerWheelChangedEvent, (_, args) =>
-        {
-            if (!volume.IsPointerOver)
-                return;
-
-            var direction = Math.Sign(args.Delta.Y);
-            if (direction == 0)
-                return;
-
-            if (_isFullscreen)
+        VolumeSliderBehavior.Attach(volume,
+            pointerActivity: RefreshFullscreenControls,
+            dragChanged: dragging =>
             {
-                _isPointerInFullscreenRevealZone = true;
-                BeginFullscreenScrollControlsGrace();
-            }
-            volume.Value = Math.Clamp(Math.Round(volume.Value) + direction, volume.Minimum, volume.Maximum);
-            volumeTooltipText.Text = $"{volume.Value:0}%";
-            RefreshFullscreenControls();
-            args.Handled = true;
-        }, RoutingStrategies.Bubble, handledEventsToo: true);
+                if (ReferenceEquals(volume, FullscreenMasterVolumeSlider))
+                    _isFullscreenVolumePointerDown = dragging;
+                RefreshFullscreenControls();
+            },
+            wheelChanged: () =>
+            {
+                if (_isFullscreen)
+                {
+                    _isPointerInFullscreenRevealZone = true;
+                    BeginFullscreenScrollControlsGrace();
+                }
+                RefreshFullscreenControls();
+            });
     }
 
     private void MasterVolumeOnValueChanged(object? sender, RangeBaseValueChangedEventArgs eventArgs)
@@ -1176,25 +827,25 @@ public sealed partial class MainWindow : Window
         if (_isApplyingMasterVolume)
             return;
 
-        var value = Math.Clamp(eventArgs.NewValue, _masterVolumeSlider.Minimum, _masterVolumeSlider.Maximum);
+        var value = Math.Clamp(eventArgs.NewValue, MasterVolumeSlider.Minimum, MasterVolumeSlider.Maximum);
         _isApplyingMasterVolume = true;
         try
         {
-            _masterVolumeSlider.Value = value;
-            _fullscreenMasterVolumeSlider.Value = value;
+            MasterVolumeSlider.Value = value;
+            FullscreenMasterVolumeSlider.Value = value;
         }
         finally
         {
             _isApplyingMasterVolume = false;
         }
 
-        _masterVolumeText.Text = $"{value:0}%";
-        _fullscreenMasterVolumeText.Text = $"{value:0}%";
+        MasterVolumeText.Text = $"{value:0}%";
+        FullscreenMasterVolumeText.Text = $"{value:0}%";
         if (value > 0) _lastPositiveMasterVolume = value;
-        _muteAllButton.IsChecked = value == 0;
+        MuteAllButton.IsChecked = value == 0;
         var muteAction = value == 0 ? $"Restore master volume ({_lastPositiveMasterVolume:0}%)" : "Mute master volume";
-        ToolTip.SetTip(_muteAllButton, muteAction);
-        AutomationProperties.SetName(_muteAllButton, muteAction);
+        ToolTip.SetTip(MuteAllButton, muteAction);
+        AutomationProperties.SetName(MuteAllButton, muteAction);
         RunPlayerAction(player => player.SetMasterVolumeAsync(value));
     }
 
@@ -1215,7 +866,7 @@ public sealed partial class MainWindow : Window
     {
         // The popup's event route can also pass through the main window.
         if (eventArgs.Handled) return;
-        if (_importPrompt.IsVisible)
+        if (ImportPrompt.IsVisible)
         {
             if (eventArgs.Key is Key.Enter or Key.Space)
             {
@@ -1240,7 +891,7 @@ public sealed partial class MainWindow : Window
         {
             return;
         }
-        else if (_cropStartBox.IsFocused || _cropEndBox.IsFocused)
+        else if (CropStartBox.IsFocused || CropEndBox.IsFocused)
         {
             return;
         }
@@ -1298,7 +949,7 @@ public sealed partial class MainWindow : Window
         // The volume slider handles its own wheel event. The bar also listens
         // to handled events so scrolling over the timeline or any other pill
         // control still adjusts the master volume.
-        if (_fullscreenMasterVolumeSlider.IsPointerOver)
+        if (FullscreenMasterVolumeSlider.IsPointerOver)
             return;
 
         _isPointerInFullscreenRevealZone = true;
@@ -1314,10 +965,10 @@ public sealed partial class MainWindow : Window
         if (direction == 0)
             return;
 
-        _masterVolumeSlider.Value = Math.Clamp(
-            Math.Round(_masterVolumeSlider.Value) + direction,
-            _masterVolumeSlider.Minimum,
-            _masterVolumeSlider.Maximum);
+        MasterVolumeSlider.Value = Math.Clamp(
+            Math.Round(MasterVolumeSlider.Value) + direction,
+            MasterVolumeSlider.Minimum,
+            MasterVolumeSlider.Maximum);
     }
 
     private void FullscreenTimelineSliderOnPointerPressed(object? sender, PointerPressedEventArgs eventArgs)
@@ -1374,8 +1025,8 @@ public sealed partial class MainWindow : Window
                 ? WindowState.Normal
                 : WindowState;
             _cursorBeforeFullscreen = Cursor;
-            _videoHostCursorBeforeFullscreen = _videoHost.Cursor;
-            _fullscreenControlsBarCursorBeforeFullscreen = _fullscreenControlsBar.Cursor;
+            _videoHostCursorBeforeFullscreen = VideoHost.Cursor;
+            _fullscreenControlsBarCursorBeforeFullscreen = FullscreenControlsBar.Cursor;
             _isFullscreen = true;
             _fullscreenScrollGraceActive = false;
             _isPointerInFullscreenRevealZone = false;
@@ -1394,7 +1045,7 @@ public sealed partial class MainWindow : Window
         _fullscreenScrollGraceTimer.Stop();
         _fullscreenScrollGraceActive = false;
         _isPointerInFullscreenRevealZone = false;
-        _fullscreenControlsPopup.IsOpen = false;
+        FullscreenControlsPopup.IsOpen = false;
         SetFullscreenPlayerCursorAutohide(false);
         RestoreFullscreenCursor();
         ApplyFullscreenLayout(false);
@@ -1414,17 +1065,17 @@ public sealed partial class MainWindow : Window
 
     private void ApplyFullscreenLayout(bool fullscreen)
     {
-        _rootGrid.Margin = fullscreen ? new Thickness(0) : NormalRootMargin;
-        _headerGrid.IsVisible = !fullscreen;
-        _workspaceTabs.IsVisible = !fullscreen;
-        _normalPlaybackArea.IsVisible = !fullscreen && !_exportTabSelected;
-        _playerSidebar.IsVisible = !fullscreen && !_exportTabSelected;
-        _workspaceGrid.ColumnSpacing = fullscreen ? 0 : 12;
-        _workspaceGrid.RowSpacing = fullscreen ? 0 : 12;
-        _workspaceGrid.ColumnDefinitions[1].Width = fullscreen ? new GridLength(0) : new GridLength(320);
-        _videoBorder.BorderThickness = fullscreen ? new Thickness(0) : new Thickness(1);
-        _videoBorder.CornerRadius = fullscreen ? new CornerRadius(0) : UiTheme.Resource<CornerRadius>("PanelRadius");
-        Grid.SetColumnSpan(_videoBorder, fullscreen ? 2 : 1);
+        RootGrid.Margin = fullscreen ? new Thickness(0) : NormalRootMargin;
+        HeaderGrid.IsVisible = !fullscreen;
+        WorkspaceTabs.IsVisible = !fullscreen;
+        NormalPlaybackArea.IsVisible = !fullscreen && !_exportTabSelected;
+        PlayerSidebar.IsVisible = !fullscreen && !_exportTabSelected;
+        WorkspaceGrid.ColumnSpacing = fullscreen ? 0 : 12;
+        WorkspaceGrid.RowSpacing = fullscreen ? 0 : 12;
+        WorkspaceGrid.ColumnDefinitions[1].Width = fullscreen ? new GridLength(0) : new GridLength(320);
+        VideoBorder.BorderThickness = fullscreen ? new Thickness(0) : new Thickness(1);
+        VideoBorder.CornerRadius = fullscreen ? new CornerRadius(0) : UiTheme.Resource<CornerRadius>("PanelRadius");
+        Grid.SetColumnSpan(VideoBorder, fullscreen ? 2 : 1);
         UpdateImportPrompt();
         if (fullscreen) Dispatcher.UIThread.Post(UpdateFullscreenPopupGeometry);
     }
@@ -1434,7 +1085,7 @@ public sealed partial class MainWindow : Window
         if (!_isFullscreen)
             return;
 
-        _fullscreenControlsPopup.IsOpen = true;
+        FullscreenControlsPopup.IsOpen = true;
         UpdateFullscreenPopupGeometry();
         _fullscreenControlsTimer.Stop();
         _fullscreenControlsTimer.Start();
@@ -1446,12 +1097,12 @@ public sealed partial class MainWindow : Window
             return;
 
         _fullscreenControlsTimer.Stop();
-        _fullscreenControlsPopup.IsOpen = false;
+        FullscreenControlsPopup.IsOpen = false;
     }
 
     private void FullscreenControlsTimerOnTick(object? sender, EventArgs eventArgs)
     {
-        if (_isFullscreen && (_fullscreenControlsBar.IsPointerOver || _isFullscreenTimelinePointerDown || _isFullscreenVolumePointerDown))
+        if (_isFullscreen && (FullscreenControlsBar.IsPointerOver || _isFullscreenTimelinePointerDown || _isFullscreenVolumePointerDown))
         {
             _fullscreenControlsTimer.Stop();
             _fullscreenControlsTimer.Start();
@@ -1490,7 +1141,7 @@ public sealed partial class MainWindow : Window
         if (!_isFullscreen)
             return;
 
-        if (_fullscreenControlsBar.IsPointerOver || _isFullscreenTimelinePointerDown || _isFullscreenVolumePointerDown)
+        if (FullscreenControlsBar.IsPointerOver || _isFullscreenTimelinePointerDown || _isFullscreenVolumePointerDown)
         {
             _fullscreenCursorTimer.Stop();
             _fullscreenCursorTimer.Start();
@@ -1498,9 +1149,9 @@ public sealed partial class MainWindow : Window
         }
 
         Cursor = FullscreenHiddenCursor;
-        _videoHost.Cursor = FullscreenHiddenCursor;
-        _fullscreenControlsBar.Cursor = FullscreenHiddenCursor;
-        _videoHost.SetNativeCursorVisible(false);
+        VideoHost.Cursor = FullscreenHiddenCursor;
+        FullscreenControlsBar.Cursor = FullscreenHiddenCursor;
+        VideoHost.SetNativeCursorVisible(false);
     }
 
     private void ShowFullscreenCursor()
@@ -1509,9 +1160,9 @@ public sealed partial class MainWindow : Window
             return;
 
         Cursor = _cursorBeforeFullscreen;
-        _videoHost.Cursor = _videoHostCursorBeforeFullscreen;
-        _fullscreenControlsBar.Cursor = _fullscreenControlsBarCursorBeforeFullscreen;
-        _videoHost.SetNativeCursorVisible(true);
+        VideoHost.Cursor = _videoHostCursorBeforeFullscreen;
+        FullscreenControlsBar.Cursor = _fullscreenControlsBarCursorBeforeFullscreen;
+        VideoHost.SetNativeCursorVisible(true);
         _fullscreenCursorTimer.Stop();
         _fullscreenCursorTimer.Start();
     }
@@ -1520,9 +1171,9 @@ public sealed partial class MainWindow : Window
     {
         _fullscreenCursorTimer.Stop();
         Cursor = _cursorBeforeFullscreen;
-        _videoHost.Cursor = _videoHostCursorBeforeFullscreen;
-        _fullscreenControlsBar.Cursor = _fullscreenControlsBarCursorBeforeFullscreen;
-        _videoHost.SetNativeCursorVisible(true);
+        VideoHost.Cursor = _videoHostCursorBeforeFullscreen;
+        FullscreenControlsBar.Cursor = _fullscreenControlsBarCursorBeforeFullscreen;
+        VideoHost.SetNativeCursorVisible(true);
         _cursorBeforeFullscreen = null;
         _videoHostCursorBeforeFullscreen = null;
         _fullscreenControlsBarCursorBeforeFullscreen = null;
@@ -1530,16 +1181,16 @@ public sealed partial class MainWindow : Window
 
     private void UpdateFullscreenPopupGeometry()
     {
-        if (!_isFullscreen || _videoBorder.Bounds.Width <= 0)
+        if (!_isFullscreen || VideoBorder.Bounds.Width <= 0)
             return;
 
-        var availableWidth = Math.Max(0, _videoBorder.Bounds.Width - 32);
+        var availableWidth = Math.Max(0, VideoBorder.Bounds.Width - 32);
         var popupWidth = Math.Min(availableWidth,
             Math.Max(FullscreenControlMinimumWidth, availableWidth * FullscreenControlWidthRatio));
 
-        _fullscreenControlsBar.Width = popupWidth;
-        _fullscreenControlsBar.Height = FullscreenControlBarHeight;
-        _fullscreenControlsPopup.VerticalOffset = -(FullscreenControlBarHeight + FullscreenControlBottomMargin);
+        FullscreenControlsBar.Width = popupWidth;
+        FullscreenControlsBar.Height = FullscreenControlBarHeight;
+        FullscreenControlsPopup.VerticalOffset = -(FullscreenControlBarHeight + FullscreenControlBottomMargin);
     }
 
     private static void SetPlayPauseIcon(Button button, PathIcon icon, bool paused)
@@ -1568,25 +1219,25 @@ public sealed partial class MainWindow : Window
 
             if (_durationSeconds > 0 && !string.IsNullOrWhiteSpace(_currentFilePath) && !IsPreparingMedia(_player))
             {
-                _fullscreenButton.IsEnabled = true;
-                _fullscreenPlayPauseButton.IsEnabled = true;
+                FullscreenButton.IsEnabled = true;
+                FullscreenPlayPauseButton.IsEnabled = true;
             }
 
             _currentPos = Math.Clamp(snapshot.PositionSeconds, 0, Math.Max(0, _durationSeconds));
-            _positionText.Text = FormatTime(snapshot.PositionSeconds);
-            _speedText.Text = $"{snapshot.PlaybackSpeed:0.##}×";
-            SetPlayPauseIcon(_playPauseButton, _playPauseIcon, snapshot.IsPaused);
-            _fullscreenPositionText.Text = FormatTime(snapshot.PositionSeconds);
-            _fullscreenDurationText.Text = FormatTime(snapshot.DurationSeconds);
-            _fullscreenSpeedText.Text = $"{snapshot.PlaybackSpeed:0.##}×";
-            SetPlayPauseIcon(_fullscreenPlayPauseButton, _fullscreenPlayPauseIcon, snapshot.IsPaused);
+            PositionText.Text = TimeFormat.Clock(snapshot.PositionSeconds);
+            SpeedText.Text = $"{snapshot.PlaybackSpeed:0.##}×";
+            SetPlayPauseIcon(PlayPauseButton, PlayPauseIcon, snapshot.IsPaused);
+            FullscreenPositionText.Text = TimeFormat.Clock(snapshot.PositionSeconds);
+            FullscreenDurationText.Text = TimeFormat.Clock(snapshot.DurationSeconds);
+            FullscreenSpeedText.Text = $"{snapshot.PlaybackSpeed:0.##}×";
+            SetPlayPauseIcon(FullscreenPlayPauseButton, FullscreenPlayPauseIcon, snapshot.IsPaused);
             if (!_isFullscreenTimelinePointerDown)
             {
                 _isApplyingFullscreenSliderValue = true;
-                _fullscreenTimelineSlider.Value = Math.Clamp(snapshot.PositionSeconds, 0, Math.Max(0, _durationSeconds));
+                FullscreenTimelineSlider.Value = Math.Clamp(snapshot.PositionSeconds, 0, Math.Max(0, _durationSeconds));
                 _isApplyingFullscreenSliderValue = false;
             }
-            _playhead?.Let(playhead => Canvas.SetLeft(playhead, TimeToX(_currentPos)));
+            if (_playhead is not null) Canvas.SetLeft(_playhead, TimeToX(_currentPos));
             UpdatePlayheadIndicators();
 
             if (snapshot.DurationSeconds > 0 && DateTimeOffset.Now - _lastStatsLog >= TimeSpan.FromSeconds(10))
@@ -1613,20 +1264,20 @@ public sealed partial class MainWindow : Window
         _durationSeconds = 0;
         _currentPos = 0;
         _timelineSized = false;
-        _timelineCanvas.Width = 0;
-        _timelineCanvas.Children.Clear();
+        TimelineCanvas.Width = 0;
+        TimelineCanvas.Children.Clear();
         _timelineMarkers.Clear();
         _playhead = null;
         _cropHighlight = null;
         _cropStartThumb = null;
         _cropEndThumb = null;
         SetCropValues(0, 0);
-        _timelineStartLabel.Text = "0:00";
-        _timelineEndLabel.Text = "0:00";
-        _positionText.Text = "00:00";
-        _speedText.Text = "1×";
-        _fullscreenSpeedText.Text = "1×";
-        _fullscreenButton.IsEnabled = false;
+        TimelineStartLabel.Text = "0:00";
+        TimelineEndLabel.Text = "0:00";
+        PositionText.Text = "00:00";
+        SpeedText.Text = "1×";
+        FullscreenSpeedText.Text = "1×";
+        FullscreenButton.IsEnabled = false;
         ResetFullscreenTimeline();
     }
 
@@ -1634,19 +1285,19 @@ public sealed partial class MainWindow : Window
     {
         _durationSeconds = Math.Max(0, duration);
         _timelineSized = _durationSeconds > 0;
-        _timelineCanvas.Children.Clear();
+        TimelineCanvas.Children.Clear();
         _timelineMarkers.Clear();
         _playhead = null;
         _cropHighlight = null;
         _cropStartThumb = null;
         _cropEndThumb = null;
-        _timelineCanvas.Width = Math.Max(_durationSeconds * PixelsPerSecond, Math.Max(0, _timelineScroller.Viewport.Width - 100));
-        _timelineStartLabel.Text = FormatTime(0);
-        _timelineEndLabel.Text = FormatTime(_durationSeconds);
+        TimelineCanvas.Width = Math.Max(_durationSeconds * PixelsPerSecond, Math.Max(0, TimelineScroller.Viewport.Width - 2 * TimelineViewport.LabelGutter));
+        TimelineStartLabel.Text = TimeFormat.Clock(0);
+        TimelineEndLabel.Text = TimeFormat.Clock(_durationSeconds);
         SetFullscreenTimelineDuration(_durationSeconds);
         EnsurePlayhead();
         DrawMinuteMarkers();
-        if (_cropToggle.IsChecked == true)
+        if (CropToggle.IsChecked == true)
         {
             EnsureCropVisuals();
             UpdateCropVisuals();
@@ -1657,31 +1308,31 @@ public sealed partial class MainWindow : Window
     {
         _isFullscreenTimelinePointerDown = false;
         _isApplyingFullscreenSliderValue = true;
-        _fullscreenTimelineSlider.IsEnabled = false;
-        _fullscreenTimelineSlider.Maximum = 1;
-        _fullscreenTimelineSlider.Value = 0;
+        FullscreenTimelineSlider.IsEnabled = false;
+        FullscreenTimelineSlider.Maximum = 1;
+        FullscreenTimelineSlider.Value = 0;
         _isApplyingFullscreenSliderValue = false;
-        _fullscreenPositionText.Text = "00:00";
-        _fullscreenDurationText.Text = "00:00";
-        _fullscreenPlayPauseButton.IsEnabled = false;
+        FullscreenPositionText.Text = "00:00";
+        FullscreenDurationText.Text = "00:00";
+        FullscreenPlayPauseButton.IsEnabled = false;
     }
 
     private void SetFullscreenTimelineDuration(double duration)
     {
         _isApplyingFullscreenSliderValue = true;
-        _fullscreenTimelineSlider.Maximum = Math.Max(1, duration);
-        _fullscreenTimelineSlider.IsEnabled = duration > 0;
-        _fullscreenTimelineSlider.Value = Math.Clamp(_currentPos, 0, Math.Max(0, duration));
+        FullscreenTimelineSlider.Maximum = Math.Max(1, duration);
+        FullscreenTimelineSlider.IsEnabled = duration > 0;
+        FullscreenTimelineSlider.Value = Math.Clamp(_currentPos, 0, Math.Max(0, duration));
         _isApplyingFullscreenSliderValue = false;
-        _fullscreenDurationText.Text = FormatTime(duration);
-        _fullscreenPlayPauseButton.IsEnabled = duration > 0;
+        FullscreenDurationText.Text = TimeFormat.Clock(duration);
+        FullscreenPlayPauseButton.IsEnabled = duration > 0;
     }
 
     private void TimelineScroller_SizeChanged(object? sender, SizeChangedEventArgs eventArgs)
     {
         if (_durationSeconds > 0)
         {
-            _timelineCanvas.Width = Math.Max(_durationSeconds * PixelsPerSecond, Math.Max(0, eventArgs.NewSize.Width - 100));
+            TimelineCanvas.Width = Math.Max(_durationSeconds * PixelsPerSecond, Math.Max(0, eventArgs.NewSize.Width - 2 * TimelineViewport.LabelGutter));
             DrawMinuteMarkers();
             if (_playhead is not null)
                 Canvas.SetLeft(_playhead, TimeToX(_currentPos));
@@ -1698,30 +1349,30 @@ public sealed partial class MainWindow : Window
         _playhead = new Rectangle
         {
             Width = 2,
-            Height = _timelineCanvas.Height,
+            Height = TimelineCanvas.Height,
             Fill = UiTheme.Resource<IBrush>("TextPrimary"),
             IsHitTestVisible = false,
             ZIndex = 10
         };
-        _timelineCanvas.Children.Add(_playhead);
+        TimelineCanvas.Children.Add(_playhead);
         Canvas.SetLeft(_playhead, TimeToX(_currentPos));
     }
 
     private double TimeToX(double seconds) =>
-        _durationSeconds <= 0 ? 0 : Math.Clamp(seconds, 0, _durationSeconds) / _durationSeconds * _timelineCanvas.Width;
+        _durationSeconds <= 0 ? 0 : Math.Clamp(seconds, 0, _durationSeconds) / _durationSeconds * TimelineCanvas.Width;
 
     private double XToTime(double x) =>
-        _timelineCanvas.Width <= 0 ? 0 : Math.Clamp(x, 0, _timelineCanvas.Width) / _timelineCanvas.Width * _durationSeconds;
+        TimelineCanvas.Width <= 0 ? 0 : Math.Clamp(x, 0, TimelineCanvas.Width) / TimelineCanvas.Width * _durationSeconds;
 
     private void DrawMinuteMarkers()
     {
-        var (first, last) = TimelineViewport.VisibleMinutes(_durationSeconds, _timelineCanvas.Width,
-            _timelineScroller.Viewport.Width, _timelineScroller.Offset.X);
+        var (first, last) = TimelineViewport.VisibleMinutes(_durationSeconds, TimelineCanvas.Width,
+            TimelineScroller.Viewport.Width, TimelineScroller.Offset.X);
         foreach (var minute in _timelineMarkers.Keys.Where(m => m < first || m > last).ToArray())
         {
             var marker = _timelineMarkers[minute];
-            _timelineCanvas.Children.Remove(marker.Line);
-            _timelineCanvas.Children.Remove(marker.Label);
+            TimelineCanvas.Children.Remove(marker.Line);
+            TimelineCanvas.Children.Remove(marker.Label);
             _timelineMarkers.Remove(minute);
             if (_markerPool.Count < 64) _markerPool.Push(marker);
         }
@@ -1733,14 +1384,14 @@ public sealed partial class MainWindow : Window
                     new Rectangle { Width = 1, Fill = UiTheme.Resource<IBrush>("TextMuted"), Opacity = 0.4, IsHitTestVisible = false },
                     new TextBlock { Foreground = UiTheme.Resource<IBrush>("TextMuted"), FontSize = 10, IsHitTestVisible = false });
                 _timelineMarkers.Add(minute, marker);
-                _timelineCanvas.Children.Add(marker.Line);
-                _timelineCanvas.Children.Add(marker.Label);
-                marker.Label.Text = FormatTime(minute * 60d);
+                TimelineCanvas.Children.Add(marker.Line);
+                TimelineCanvas.Children.Add(marker.Label);
+                marker.Label.Text = TimeFormat.Clock(minute * 60d);
                 marker.Label.IsVisible = minute != 0;
                 Canvas.SetTop(marker.Label, 2);
             }
             var x = TimeToX(minute * 60d);
-            marker.Line.Height = _timelineCanvas.Height;
+            marker.Line.Height = TimelineCanvas.Height;
             Canvas.SetLeft(marker.Line, x);
             Canvas.SetLeft(marker.Label, x + 3);
             if (minute == int.MaxValue) break;
@@ -1749,9 +1400,9 @@ public sealed partial class MainWindow : Window
 
     private void TimelineCanvas_PointerPressed(object? sender, PointerPressedEventArgs eventArgs)
     {
-        if (_player is null || !eventArgs.GetCurrentPoint(_timelineCanvas).Properties.IsLeftButtonPressed)
+        if (_player is null || !eventArgs.GetCurrentPoint(TimelineCanvas).Properties.IsLeftButtonPressed)
             return;
-        RunPlayerAction(player => player.SeekAsync(XToTime(eventArgs.GetPosition(_timelineCanvas).X)));
+        RunPlayerAction(player => player.SeekAsync(XToTime(eventArgs.GetPosition(TimelineCanvas).X)));
     }
 
     private void EnsureCropVisuals()
@@ -1761,24 +1412,24 @@ public sealed partial class MainWindow : Window
 
         _cropHighlight = new Rectangle
         {
-            Height = _timelineCanvas.Height,
+            Height = TimelineCanvas.Height,
             Fill = UiTheme.Resource<IBrush>("CropSelectionBrush"),
             IsHitTestVisible = false,
             ZIndex = 4
         };
-        _timelineCanvas.Children.Add(_cropHighlight);
+        TimelineCanvas.Children.Add(_cropHighlight);
         _cropStartThumb = MakeCropHandle();
         _cropEndThumb = MakeCropHandle();
         _cropStartThumb.DragDelta += CropStartThumbOnDragDelta;
         _cropEndThumb.DragDelta += CropEndThumbOnDragDelta;
-        _timelineCanvas.Children.Add(_cropStartThumb);
-        _timelineCanvas.Children.Add(_cropEndThumb);
+        TimelineCanvas.Children.Add(_cropStartThumb);
+        TimelineCanvas.Children.Add(_cropEndThumb);
     }
 
     private Thumb MakeCropHandle() => new()
     {
         Width = 8,
-        Height = _timelineCanvas.Height,
+        Height = TimelineCanvas.Height,
         Background = UiTheme.Resource<IBrush>("AccentBrush"),
         Opacity = 0.7,
         Cursor = new Cursor(StandardCursorType.SizeWestEast),
@@ -1800,7 +1451,7 @@ public sealed partial class MainWindow : Window
 
     private void CropToggleOnCheckedChanged(object? sender, RoutedEventArgs eventArgs)
     {
-        var visible = _cropToggle.IsChecked == true;
+        var visible = CropToggle.IsChecked == true;
         if (!visible)
         {
             SetCropVisualsVisible(false);
@@ -1848,8 +1499,8 @@ public sealed partial class MainWindow : Window
     {
         _cropStart = Math.Clamp(start, 0, Math.Max(0, _durationSeconds));
         _cropEnd = Math.Clamp(end, _cropStart, Math.Max(0, _durationSeconds));
-        _cropStartText.Text = _cropStartBox.Text = FormatTimeCode(_cropStart);
-        _cropEndText.Text = _cropEndBox.Text = FormatTimeCode(_cropEnd);
+        CropStartText.Text = CropStartBox.Text = TimeFormat.TimeCode(_cropStart);
+        CropEndText.Text = CropEndBox.Text = TimeFormat.TimeCode(_cropEnd);
         UpdateCropVisuals();
     }
 
@@ -1859,13 +1510,13 @@ public sealed partial class MainWindow : Window
         if (eventArgs.Key == Key.Enter)
         {
             CommitCropTimeBox(box);
-            _rootGrid.Focus();
+            RootGrid.Focus();
             eventArgs.Handled = true;
         }
         else if (eventArgs.Key == Key.Escape)
         {
-            box.Text = FormatTimeCode(ReferenceEquals(box, _cropStartBox) ? _cropStart : _cropEnd);
-            _rootGrid.Focus();
+            box.Text = TimeFormat.TimeCode(ReferenceEquals(box, CropStartBox) ? _cropStart : _cropEnd);
+            RootGrid.Focus();
             eventArgs.Handled = true;
         }
     }
@@ -1881,10 +1532,10 @@ public sealed partial class MainWindow : Window
             double.IsFinite(seconds) && seconds >= 0 && seconds < 60)
         {
             var value = hours * 3600d + minutes * 60d + seconds;
-            if (ReferenceEquals(box, _cropStartBox)) SetCropValues(value, _cropEnd);
+            if (ReferenceEquals(box, CropStartBox)) SetCropValues(value, _cropEnd);
             else SetCropValues(_cropStart, value);
         }
-        else box.Text = FormatTimeCode(ReferenceEquals(box, _cropStartBox) ? _cropStart : _cropEnd);
+        else box.Text = TimeFormat.TimeCode(ReferenceEquals(box, CropStartBox) ? _cropStart : _cropEnd);
     }
 
     private void TimelineScroller_ScrollChanged(object? sender, ScrollChangedEventArgs eventArgs)
@@ -1900,13 +1551,13 @@ public sealed partial class MainWindow : Window
             Math.Abs(delta.Y) <= Math.Abs(delta.X))
             return;
 
-        var maximumOffset = Math.Max(0, _timelineScroller.Extent.Width - _timelineScroller.Viewport.Width);
+        var maximumOffset = Math.Max(0, TimelineScroller.Extent.Width - TimelineScroller.Viewport.Width);
         if (maximumOffset <= 0)
             return;
 
-        var target = Math.Clamp(_timelineScroller.Offset.X + delta.Y * TimelineWheelPixelsPerStep,
+        var target = Math.Clamp(TimelineScroller.Offset.X + delta.Y * TimelineWheelPixelsPerStep,
             0, maximumOffset);
-        _timelineScroller.Offset = new Vector(target, _timelineScroller.Offset.Y);
+        TimelineScroller.Offset = new Vector(target, TimelineScroller.Offset.Y);
         eventArgs.Handled = true;
     }
 
@@ -1914,22 +1565,22 @@ public sealed partial class MainWindow : Window
     {
         if (_playhead is null || _durationSeconds <= 0)
         {
-            _playheadLeftIndicator.IsVisible = false;
-            _playheadRightIndicator.IsVisible = false;
+            PlayheadLeftIndicator.IsVisible = false;
+            PlayheadRightIndicator.IsVisible = false;
             return;
         }
 
-        var headX = 50 + TimeToX(_currentPos);
-        var viewLeft = _timelineScroller.Offset.X;
-        var viewRight = viewLeft + _timelineScroller.Viewport.Width;
-        _playheadLeftIndicator.IsVisible = headX < viewLeft;
-        _playheadRightIndicator.IsVisible = headX > viewRight;
+        var headX = TimelineViewport.LabelGutter + TimeToX(_currentPos);
+        var viewLeft = TimelineScroller.Offset.X;
+        var viewRight = viewLeft + TimelineScroller.Viewport.Width;
+        PlayheadLeftIndicator.IsVisible = headX < viewLeft;
+        PlayheadRightIndicator.IsVisible = headX > viewRight;
     }
 
     private void PlayheadIndicator_PointerPressed(object? sender, PointerPressedEventArgs eventArgs)
     {
-        var target = Math.Max(0, 50 + TimeToX(_currentPos) - _timelineScroller.Viewport.Width / 2);
-        _timelineScroller.Offset = new Vector(target, _timelineScroller.Offset.Y);
+        var target = Math.Max(0, TimelineViewport.LabelGutter + TimeToX(_currentPos) - TimelineScroller.Viewport.Width / 2);
+        TimelineScroller.Offset = new Vector(target, TimelineScroller.Offset.Y);
         eventArgs.Handled = true;
     }
 
@@ -1950,17 +1601,17 @@ public sealed partial class MainWindow : Window
 
     private void ShowError(string message)
     {
-        _errorText.Text = message;
-        _errorBanner.IsVisible = true;
+        ErrorText.Text = message;
+        ErrorBanner.IsVisible = true;
         if (_durationSeconds <= 0)
         {
             _currentFilePath = null;
-            _mediaNameText.Text = "Dino Player";
+            MediaNameText.Text = "Dino Player";
             UpdateImportPrompt();
         }
     }
 
-    private void DismissErrorOnClick(object? sender, RoutedEventArgs eventArgs) => _errorBanner.IsVisible = false;
+    private void DismissErrorOnClick(object? sender, RoutedEventArgs eventArgs) => ErrorBanner.IsVisible = false;
 
     private void Window_DragOver(object? sender, DragEventArgs eventArgs)
     {
@@ -1995,9 +1646,9 @@ public sealed partial class MainWindow : Window
         _fullscreenScrollGraceTimer.Stop();
         var player = Interlocked.Exchange(ref _player, null);
         _preparingMedia = null;
-        _openMenuItem.IsEnabled = _importPrompt.IsEnabled = false;
+        OpenMenuItem.IsEnabled = ImportPrompt.IsEnabled = false;
         SetMediaControlsEnabled(false);
-        _fullscreenMasterVolumeSlider.IsEnabled = false;
+        FullscreenMasterVolumeSlider.IsEnabled = false;
         if (player is not null) _playerShutdown = player.StopAsync();
     }
 
@@ -2022,7 +1673,7 @@ public sealed partial class MainWindow : Window
             finally { _confirmingClose = false; }
         }
         _closing = true;
-        _importPrompt.IsVisible = false;
+        ImportPrompt.IsVisible = false;
         _tabResumePlayback = null;
         try { await _exportManager.StopAsync(); }
         catch (Exception exception) { AppLog.Warn($"An export failed while closing: {exception.Message}"); }
@@ -2039,35 +1690,10 @@ public sealed partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _closed = true;
-        _importPrompt.IsVisible = false;
-        _exportView.Dispose();
+        ImportPrompt.IsVisible = false;
+        ExportPanel.Dispose();
         AppLog.MessageWritten -= OnLogMessage;
         _logPump.Dispose();
         base.OnClosed(e);
-    }
-
-    private static string FormatTime(double seconds)
-    {
-        var time = TimeSpan.FromSeconds(Math.Max(0, double.IsFinite(seconds) ? seconds : 0));
-        return time.TotalHours >= 1
-            ? $"{(int)time.TotalHours}:{time.Minutes:D2}:{time.Seconds:D2}"
-            : $"{time.Minutes:D2}:{time.Seconds:D2}";
-    }
-
-    private static string FormatTimeCode(double seconds)
-    {
-        var time = TimeSpan.FromSeconds(Math.Max(0, double.IsFinite(seconds) ? seconds : 0));
-        return $"{(int)time.TotalHours:D2}:{time.Minutes:D2}:{time.Seconds:D2}.{time.Milliseconds:D3}";
-    }
-
-
-}
-
-internal static class ControlExtensions
-{
-    public static void Let<T>(this T? value, Action<T> action) where T : class
-    {
-        if (value is not null)
-            action(value);
     }
 }
