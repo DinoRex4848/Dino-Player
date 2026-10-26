@@ -41,7 +41,7 @@ public sealed partial class PreferencesWindow : Window
         HoverPopup.ForText(DefaultExportPresetInfo,
             "Select a saved preset to initialize export settings on the first Export visit or first use of the player's Add to queue button. Your encoding choices are kept between clips. Choose Manual to use the export defaults.");
         HoverPopup.ForText(DefaultOutputFolderInfo,
-            "New exports use this folder by default. If it is empty or unavailable, the source video's folder is used instead.");
+            "New exports use this folder by default. If it is empty or unavailable, the source video's folder is used instead. A folder you choose with Browse in the Export tab is kept for later videos.");
         HoverPopup.ForText(SpeedControlsInfo,
             "Set the keyboard shortcuts used to speed up or slow down playback. The default keys are = / + and - / _." );
         HoverPopup.ForText(PlaybackEndInfo,
@@ -116,28 +116,24 @@ public sealed partial class PreferencesWindow : Window
 
     private void CancelOnClick(object? sender, RoutedEventArgs eventArgs) => Close(false);
 
-    private void SpeedUpShortcutBoxOnKeyDown(object? sender, KeyEventArgs eventArgs)
-    {
-        CaptureShortcut(eventArgs, up: true);
-        eventArgs.Handled = true;
-    }
+    private void SpeedUpShortcutBoxOnKeyDown(object? sender, KeyEventArgs eventArgs) => CaptureShortcut(eventArgs, up: true);
 
-    private void SpeedDownShortcutBoxOnKeyDown(object? sender, KeyEventArgs eventArgs)
-    {
-        CaptureShortcut(eventArgs, up: false);
-        eventArgs.Handled = true;
-    }
+    private void SpeedDownShortcutBoxOnKeyDown(object? sender, KeyEventArgs eventArgs) => CaptureShortcut(eventArgs, up: false);
 
     private void CaptureShortcut(KeyEventArgs eventArgs, bool up)
     {
-        if (eventArgs.PhysicalKey == PhysicalKey.None ||
-            eventArgs.PhysicalKey.ToString().Contains("Shift", StringComparison.Ordinal) ||
-            eventArgs.PhysicalKey.ToString().Contains("Control", StringComparison.Ordinal) ||
-            eventArgs.PhysicalKey.ToString().Contains("Alt", StringComparison.Ordinal) ||
-            eventArgs.PhysicalKey.ToString().Contains("Meta", StringComparison.Ordinal))
+        var modifiers = eventArgs.KeyModifiers & (KeyModifiers.Shift | KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta);
+        // Leave Tab/Shift+Tab, Enter and Escape to move focus, save and cancel.
+        if ((eventArgs.Key == Key.Tab && (modifiers & ~KeyModifiers.Shift) == KeyModifiers.None) ||
+            (eventArgs.Key is Key.Enter or Key.Escape && modifiers == KeyModifiers.None))
             return;
 
-        var modifiers = eventArgs.KeyModifiers & (KeyModifiers.Shift | KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta);
+        eventArgs.Handled = true;
+        if (eventArgs.PhysicalKey is PhysicalKey.None or PhysicalKey.ShiftLeft or PhysicalKey.ShiftRight or
+            PhysicalKey.ControlLeft or PhysicalKey.ControlRight or PhysicalKey.AltLeft or PhysicalKey.AltRight or
+            PhysicalKey.MetaLeft or PhysicalKey.MetaRight)
+            return;
+
         if (up)
         {
             _speedUpKey = PlaybackShortcut.KeyName(eventArgs.PhysicalKey);

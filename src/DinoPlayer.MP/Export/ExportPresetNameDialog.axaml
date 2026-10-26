@@ -7,7 +7,7 @@
   <Grid Margin="14" RowDefinitions="Auto,Auto" RowSpacing="12">
     <TextBox x:Name="NameBox" Grid.Row="0" PlaceholderText="Preset name" />
     <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <Button Content="Cancel" Click="CancelOnClick" />
+      <Button Content="Cancel" Click="CancelOnClick" IsCancel="True" />
       <Button Content="Save" Click="SaveOnClick" IsDefault="True" />
     </StackPanel>
   </Grid>

@@ -32,6 +32,9 @@ public sealed partial class ExportView : UserControl, IDisposable
     private string? _selectedLog;
     private Guid? _selectedLogJob;
     private string _lastSourcePath = "";
+    // The export folder the view filled in itself. It follows the next source
+    // video; a folder the user picked is kept.
+    private string? _automaticOutputFolder;
     private string _videoBitrate = "8";
     private string _videoQuality = "23";
     private bool _showingQuality;
@@ -156,11 +159,7 @@ public sealed partial class ExportView : UserControl, IDisposable
             ? "Open a video in the Video player tab to prepare an export." : BuildSourceDescription();
         if (changedSource && !string.IsNullOrWhiteSpace(context.SourcePath))
         {
-            var directory = SettingsStore.GetDefaultOutputFolder();
-            if (!string.IsNullOrWhiteSpace(OutputFolderBox.Text)) directory = OutputFolderBox.Text;
-            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
-                directory = Path.GetDirectoryName(context.SourcePath) ?? Environment.CurrentDirectory;
-            OutputFolderBox.Text = directory;
+            if (IsOutputFolderAutomatic) SetAutomaticOutputFolder(context.SourcePath);
             OutputNameBox.Text = Path.GetFileNameWithoutExtension(context.SourcePath) + "_export";
         }
         if (!string.IsNullOrWhiteSpace(context.SourcePath)) _lastSourcePath = context.SourcePath;
@@ -169,6 +168,26 @@ public sealed partial class ExportView : UserControl, IDisposable
     }
 
     internal event Action<ExportManagerSnapshot>? StatusUpdated;
+
+    private bool IsOutputFolderAutomatic =>
+        string.IsNullOrWhiteSpace(OutputFolderBox.Text) || OutputFolderBox.Text == _automaticOutputFolder;
+
+    // The Preferences default folder, or the source video's folder when no
+    // default is set or it is unavailable.
+    private void SetAutomaticOutputFolder(string sourcePath)
+    {
+        var directory = SettingsStore.GetDefaultOutputFolder();
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+            directory = Path.GetDirectoryName(sourcePath) ?? Environment.CurrentDirectory;
+        OutputFolderBox.Text = _automaticOutputFolder = directory;
+    }
+
+    /// <summary>Re-applies the default export folder after Preferences change, unless the user picked a folder.</summary>
+    internal void ApplyDefaultOutputFolder()
+    {
+        if (IsOutputFolderAutomatic && !string.IsNullOrWhiteSpace(_lastSourcePath))
+            SetAutomaticOutputFolder(_lastSourcePath);
+    }
 
     private void EnsureDefaultsInitialized()
     {
@@ -193,7 +212,7 @@ public sealed partial class ExportView : UserControl, IDisposable
             ? $"Crop {TimeFormat.ClockWithFraction(_context.Start)} → {TimeFormat.ClockWithFraction(_context.End)} ({TimeFormat.ClockWithFraction(_context.End - _context.Start)})"
             : $"Full duration {TimeFormat.ClockWithFraction(_context.Duration)}";
         var enabled = _context.Tracks.Count(track => track.Enabled);
-        return $"Source: {Path.GetFileName(_context.SourcePath)}  •  {crop}  •  {enabled} audio track(s) selected";
+        return $"Source: {Path.GetFileName(_context.SourcePath)}  •  {crop}  •  {CountTracks(enabled)} selected";
     }
 
     private bool HasCrop => _context.CropEnabled;
@@ -221,8 +240,10 @@ public sealed partial class ExportView : UserControl, IDisposable
         var presets = VideoGpuCheck.IsChecked == true
             ? new[] { "p1", "p2", "p3", "p4", "p5", "p6", "p7" }
             : GetCpuPresets(codec);
+        var previous = VideoPresetCombo.SelectedItem as string;
         VideoPresetCombo.ItemsSource = presets;
-        VideoPresetCombo.SelectedItem = VideoGpuCheck.IsChecked == true ? "p4" : presets[0] == "1" ? "8" : "medium";
+        VideoPresetCombo.SelectedItem = previous is not null && presets.Contains(previous) ? previous
+            : VideoGpuCheck.IsChecked == true ? "p4" : codec == ExportNames.Av1 ? "8" : "medium";
         RefreshRateControl();
         RefreshSpeedExportAvailability();
     }
@@ -446,7 +467,9 @@ public sealed partial class ExportView : UserControl, IDisposable
 
     internal void ApplyOutputFolderSelection(string? folder)
     {
-        if (!string.IsNullOrWhiteSpace(folder)) OutputFolderBox.Text = folder;
+        if (string.IsNullOrWhiteSpace(folder)) return;
+        OutputFolderBox.Text = folder;
+        _automaticOutputFolder = null;
     }
 
     private ExportOptions CaptureOptions() => new()
@@ -623,7 +646,7 @@ public sealed partial class ExportView : UserControl, IDisposable
     {
         var options = job.Definition.Options;
         var crop = options.CropEnabled ? $"{TimeFormat.ClockWithFraction(options.Start)} → {TimeFormat.ClockWithFraction(options.End)}" : "Full video";
-        return $"Source: {options.SourcePath}\nOutput: {options.OutputPath}\n{crop} · {options.Tracks.Count(track => track.Enabled)} audio track(s) · {(options.CopyPlaybackSpeed ? options.PlaybackSpeed : 1):0.##}×\n" +
+        return $"Source: {options.SourcePath}\nOutput: {options.OutputPath}\n{crop} · {CountTracks(options.Tracks.Count(track => track.Enabled))} · {(options.CopyPlaybackSpeed ? options.PlaybackSpeed : 1):0.##}×\n" +
             $"Video: {(options.VideoAdvanced ? options.VideoAdvancedText : options.VideoCodec)} · Audio: {(options.AudioAdvanced ? options.AudioAdvancedText : options.AudioCodec)}" +
             (job.Definition.Command.Warning is { } warning ? $"\n{warning}" : "") +
             (job.Error is { } error ? $"\n{error}" : "");
@@ -654,6 +677,8 @@ public sealed partial class ExportView : UserControl, IDisposable
             PropertyChanged?.Invoke(this, new(nameof(Status)));
         }
     }
+
+    private static string CountTracks(int count) => count == 1 ? "1 audio track" : $"{count} audio tracks";
 
     public void Dispose() => _refreshTimer.Stop();
 }

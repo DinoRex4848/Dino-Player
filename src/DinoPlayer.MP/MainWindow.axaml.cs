@@ -108,7 +108,7 @@ public sealed partial class MainWindow : Window
         Opened += (_, _) => UpdateImportPrompt();
         Activated += (_, _) =>
         {
-            FocusPlayer();
+            if (!CropStartBox.IsFocused && !CropEndBox.IsFocused) FocusPlayer();
         };
         PlayPauseButton.Click += (_, _) => RunPlayerAction(player => player.TogglePauseAsync());
         FullscreenButton.Click += (_, _) => ToggleFullscreen();
@@ -262,6 +262,7 @@ public sealed partial class MainWindow : Window
         DiagnosticLogExpander.IsVisible = general.ShowDiagnosticLog;
         PlayerAddToQueueButton.IsVisible = general.ShowPlayerQueueButton;
         ApplyCropTimeEditingPreference(general.EditableCropTimes);
+        ExportPanel.ApplyDefaultOutputFolder();
         if (!general.ShowPlayerQueueButton) HidePlayerQueueStatus();
         if (!general.ShowDiagnosticLog) DiagnosticLogExpander.IsExpanded = false;
         RunPlayerAction(player => player.SetLoopingAsync(general.LoopByDefault));
@@ -340,9 +341,9 @@ public sealed partial class MainWindow : Window
             try
             {
                 var close = await new ConfirmDialog(
-                    $"There are {exports.WaitingCount} waiting export(s) and {(exports.Active is null ? 0 : 1)} active export(s).\n\nClosing cancels unfinished exports and discards the queue. The queue is not saved.",
+                    $"{DescribeUnfinishedExports(exports)}\n\nClosing cancels unfinished exports and discards the queue. The queue is not saved.",
                     "Cancel exports and close", "Keep open", defaultToNo: true)
-                    { Title = "Unfinished exports", Width = 530, Height = 220 }.ShowDialog<bool>(this);
+                    { Title = "Unfinished exports", Width = 530 }.ShowDialog<bool>(this);
                 if (!close) return;
             }
             finally { _confirmingClose = false; }
@@ -360,6 +361,15 @@ public sealed partial class MainWindow : Window
             _allowClose = true;
             Close();
         }
+    }
+
+    private static string DescribeUnfinishedExports(ExportManagerSnapshot exports)
+    {
+        var parts = new List<string>();
+        if (exports.Active is not null) parts.Add("1 export is running");
+        if (exports.WaitingCount > 0)
+            parts.Add(exports.WaitingCount == 1 ? "1 export is waiting" : $"{exports.WaitingCount} exports are waiting");
+        return string.Join(" and ", parts) + ".";
     }
 
     protected override void OnClosed(EventArgs e)

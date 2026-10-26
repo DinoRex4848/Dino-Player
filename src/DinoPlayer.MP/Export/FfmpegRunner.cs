@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 
@@ -68,9 +69,23 @@ internal sealed class FfmpegRunner
                 try { await process.WaitForExitAsync().ConfigureAwait(false); }
                 catch (InvalidOperationException) { }
             }
-            return new(null, cancellationToken.IsCancellationRequested, exception.Message);
+            var message = !started && exception is Win32Exception startError ? DescribeStartFailure(executable, startError) : exception.Message;
+            return new(null, cancellationToken.IsCancellationRequested, message);
         }
     }
+
+    private const int ErrorFileNotFound = 2;      // ENOENT and ERROR_FILE_NOT_FOUND
+    private const int ErrorPermissionDenied = 13;  // EACCES
+
+    internal static string DescribeStartFailure(string executable, Win32Exception error) => error.NativeErrorCode switch
+    {
+        ErrorFileNotFound =>
+            $"FFmpeg was not found ({executable}). Keep the ffmpeg file that came with Dino Player beside the app, " +
+            "install FFmpeg, or set DINOPLAYER_FFMPEG to its full path.",
+        ErrorPermissionDenied when !OperatingSystem.IsWindows() =>
+            $"FFmpeg could not be started because it is not executable ({executable}). Run: chmod +x \"{executable}\"",
+        _ => $"FFmpeg could not be started ({executable}): {error.Message}"
+    };
 
     private static async Task ReadLinesAsync(StreamReader reader, Action<string> receive)
     {

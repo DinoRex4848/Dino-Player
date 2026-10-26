@@ -64,7 +64,7 @@
     <TextBlock x:Name="StatusText" Grid.Row="8" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" IsVisible="False" />
 
     <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <Button Content="Cancel" Click="CancelOnClick" />
+      <Button Content="Cancel" Click="CancelOnClick" IsCancel="True" />
       <Button Classes="primary" Content="Save" Click="SaveOnClick" IsDefault="True" />
     </StackPanel>
   </Grid>

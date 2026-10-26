@@ -136,10 +136,10 @@
               </Style>
             </ScrollViewer.Styles>
             <Grid ColumnDefinitions="50,Auto,50">
-              <TextBlock x:Name="TimelineStartLabel" Text="0:00" FontSize="10" Classes="muted" HorizontalAlignment="Right" Margin="0,2,4,0" />
+              <TextBlock x:Name="TimelineStartLabel" Text="00:00" FontSize="10" Classes="muted" HorizontalAlignment="Right" Margin="0,2,4,0" />
               <Canvas x:Name="TimelineCanvas" Grid.Column="1" Height="58" Background="{DynamicResource ControlBackground}"
                       PointerPressed="TimelineCanvas_PointerPressed" />
-              <TextBlock x:Name="TimelineEndLabel" Grid.Column="2" Text="0:00" FontSize="10" Classes="muted" Margin="4,2,0,0" />
+              <TextBlock x:Name="TimelineEndLabel" Grid.Column="2" Text="00:00" FontSize="10" Classes="muted" Margin="4,2,0,0" />
             </Grid>
           </ScrollViewer>
           <Path x:Name="PlayheadLeftIndicator" Data="M0,8 L11,0 L11,16 Z" Fill="{DynamicResource TextPrimary}"

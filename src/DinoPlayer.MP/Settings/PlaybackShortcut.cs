@@ -106,10 +106,10 @@ public static class PlaybackShortcut
         "Equal" => "= / +",
         "Minus" => "- / _",
         "Space" => "Space",
-        "Left" => "Left Arrow",
-        "Right" => "Right Arrow",
-        "Up" => "Up Arrow",
-        "Down" => "Down Arrow",
+        "ArrowLeft" => "Left Arrow",
+        "ArrowRight" => "Right Arrow",
+        "ArrowUp" => "Up Arrow",
+        "ArrowDown" => "Down Arrow",
         _ => keyName
     };
 }

@@ -102,8 +102,7 @@ public sealed partial class MainWindow
         _cropStartThumb = null;
         _cropEndThumb = null;
         SetCropValues(0, 0);
-        TimelineStartLabel.Text = "0:00";
-        TimelineEndLabel.Text = "0:00";
+        TimelineStartLabel.Text = TimelineEndLabel.Text = TimeFormat.Clock(0);
         PositionText.Text = "00:00";
         SpeedText.Text = "1×";
         FullscreenSpeedText.Text = "1×";

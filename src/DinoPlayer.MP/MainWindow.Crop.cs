@@ -12,6 +12,8 @@ namespace DinoPlayer.MP;
 // Crop selection: timeline handles, Set Start/End and editable timecodes.
 public sealed partial class MainWindow
 {
+    private const double DefaultCropSeconds = 10;
+
     private void ApplyCropTimeEditingPreference(bool editable)
     {
         foreach (var box in new[] { CropStartBox, CropEndBox })
@@ -85,7 +87,13 @@ public sealed partial class MainWindow
             return;
 
         EnsureCropVisuals();
-        SetCropValues(_currentPos, Math.Min(_currentPos + 10, _durationSeconds));
+        // Keep the earlier selection for this video. Otherwise select ten
+        // seconds from the playhead, starting earlier if the video ends sooner.
+        if (_cropEnd <= _cropStart)
+        {
+            var start = Math.Clamp(_currentPos, 0, Math.Max(0, _durationSeconds - DefaultCropSeconds));
+            SetCropValues(start, Math.Min(start + DefaultCropSeconds, _durationSeconds));
+        }
         SetCropVisualsVisible(true);
         UpdateCropVisuals();
     }
@@ -108,7 +116,7 @@ public sealed partial class MainWindow
         if (_currentPos <= _cropEnd)
             SetCropValues(_currentPos, _cropEnd);
         else
-            SetCropValues(Math.Min(_currentPos, _durationSeconds), Math.Min(_currentPos + 10, _durationSeconds));
+            SetCropValues(Math.Min(_currentPos, _durationSeconds), Math.Min(_currentPos + DefaultCropSeconds, _durationSeconds));
     }
 
     private void SetCropEndToCurrent()
@@ -116,7 +124,7 @@ public sealed partial class MainWindow
         if (_currentPos >= _cropStart)
             SetCropValues(_cropStart, _currentPos);
         else
-            SetCropValues(Math.Max(0, _currentPos - 10), _currentPos);
+            SetCropValues(Math.Max(0, _currentPos - DefaultCropSeconds), _currentPos);
     }
 
     private void SetCropValues(double start, double end)

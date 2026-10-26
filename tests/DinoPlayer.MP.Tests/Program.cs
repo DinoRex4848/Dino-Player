@@ -295,7 +295,17 @@ internal static class Program
             await Test("FFmpeg missing executable is reported", async () =>
             {
                 var result = await new FfmpegRunner().RunAsync(Path.Combine(Temp, "missing-ffmpeg"), new([], 1, null), _ => { }, _ => { }, default);
-                Check(result.Error is not null, "Missing FFmpeg was reported as success.");
+                Check(result.Error?.StartsWith("FFmpeg was not found", StringComparison.Ordinal) == true &&
+                      result.Error.Contains("DINOPLAYER_FFMPEG", StringComparison.Ordinal),
+                    $"Missing FFmpeg was not explained: {result.Error ?? "success"}");
+                if (!OperatingSystem.IsWindows())
+                {
+                    var notExecutable = Path.Combine(Temp, "not-executable-ffmpeg");
+                    File.WriteAllText(notExecutable, "#!/bin/sh\n");
+                    result = await new FfmpegRunner().RunAsync(notExecutable, new([], 1, null), _ => { }, _ => { }, default);
+                    Check(result.Error?.Contains("chmod +x", StringComparison.Ordinal) == true,
+                        $"A non-executable FFmpeg was not explained: {result.Error ?? "success"}");
+                }
             });
             await ExportManagerTests.Run();
             if (args.Contains("--integration")) await IntegrationTests.Run(args.Contains("--nvenc"));

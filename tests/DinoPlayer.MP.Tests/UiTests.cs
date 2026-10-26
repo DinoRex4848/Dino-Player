@@ -71,6 +71,7 @@ internal static class UiTests
                 await CheckTrackScrolling(main);
                 await CheckPreferences(main, player);
                 await CheckCropTimeEditing(main, player);
+                await CheckCropToggleMemory(main, player);
                 await CheckPlaybackFocus(main, player);
                 await CheckRapidSeeking(main, player, source);
                 var manager = Field<ExportManager>(main, "_exportManager");
@@ -110,6 +111,7 @@ internal static class UiTests
                 Control<ToggleButton>(export, "VideoAdvancedToggle").IsChecked = false;
                 await CheckQualityControls(export);
                 Console.WriteLine("PASS UI preset dirty state, quality controls and active export settings");
+                CheckAutomaticExportFolder(export);
 
                 await SwitchTab(main, false);
                 await player.SeekAsync(.25);
@@ -945,6 +947,17 @@ internal static class UiTests
         Control<CheckBox>(preferences, "ShowPlayerQueueButtonCheck").IsChecked = false;
         Call(preferences, "CancelOnClick", null, new RoutedEventArgs());
         Program.Check(!await dialog && SettingsStore.Current.General.ShowPlayerQueueButton, "Cancel changed the queue shortcut preference.");
+        preferences = new PreferencesWindow();
+        dialog = preferences.ShowDialog<bool>(main);
+        var speedUp = Control<TextBox>(preferences, "SpeedUpShortcutBox");
+        var savedShortcut = speedUp.Text;
+        PressKey(speedUp, Key.Tab, PhysicalKey.Tab);
+        Program.Check(speedUp.Text == savedShortcut, "Tab was captured as a speed shortcut.");
+        PressKey(speedUp, Key.Q, PhysicalKey.Q);
+        Program.Check(speedUp.Text == "Q", "A speed shortcut key was not captured.");
+        PressKey(speedUp, Key.Escape, PhysicalKey.Escape);
+        Program.Check(!await dialog.WaitAsync(TimeSpan.FromSeconds(5)) && SettingsStore.GetPlaybackShortcuts().SpeedUpKey == "Equal",
+            "Escape did not cancel Preferences or was captured as a shortcut.");
         var expander = Control<Expander>(main, "DiagnosticLogExpander");
         Program.Check(expander.IsVisible && !expander.IsExpanded, "Diagnostics was not enabled as a collapsed expander.");
         // A three-second fixture must stay loaded and play again after its end.
@@ -970,6 +983,60 @@ internal static class UiTests
         Program.Check(Control<TextBox>(main, "LogTextBox").Text!.Contains("Hidden diagnostic test"), "Hiding diagnostics stopped log collection.");
         await player.SeekAsync(.25);
         Console.WriteLine("PASS UI Preferences save, immediate looping, collapsed diagnostics and logging while hidden");
+    }
+
+    private static async Task CheckCropToggleMemory(MainWindow main, IPlaybackEngine player)
+    {
+        var crop = Control<ToggleButton>(main, "CropToggle");
+        var duration = player.GetSnapshot().DurationSeconds;
+        crop.IsChecked = false;
+        Call(main, "SetCropValues", 0d, 0d);
+        await player.SeekAsync(duration);
+        await Until(() => Field<double>(main, "_currentPos") > duration - .5);
+        crop.IsChecked = true;
+        Program.Check(Math.Abs(Field<double>(main, "_cropEnd") - duration) < .01 &&
+                      Math.Abs(Field<double>(main, "_cropStart") - Math.Max(0, duration - 10)) < .01,
+            "Turning Crop on at the end did not select the last ten seconds.");
+        Call(main, "SetCropValues", .3d, .9d);
+        crop.IsChecked = false;
+        await player.SeekAsync(0);
+        crop.IsChecked = true;
+        Program.Check(Field<double>(main, "_cropStart") == .3 && Field<double>(main, "_cropEnd") == .9,
+            "Turning Crop off and on lost the selection.");
+        crop.IsChecked = false;
+        Call(main, "SetCropValues", 0d, 0d);
+        await Until(() => Field<double>(main, "_currentPos") < .5);
+        Console.WriteLine("PASS UI crop keeps its selection and starts a full selection near the end");
+    }
+
+    private static void CheckAutomaticExportFolder(ExportView export)
+    {
+        var general = SettingsStore.Current.General;
+        var shortcuts = SettingsStore.GetPlaybackShortcuts();
+        var folderBox = Control<TextBox>(export, "OutputFolderBox");
+        var first = Directory.CreateDirectory(Path.Combine(Program.Temp, "folder-a")).FullName;
+        var second = Directory.CreateDirectory(Path.Combine(Program.Temp, "folder-b")).FullName;
+        try
+        {
+            SettingsStore.SavePreferences(general.DefaultExportPresetName, null, shortcuts);
+            folderBox.Text = "";
+            export.SetContext(new ExportContext { SourcePath = Path.Combine(first, "a.mkv"), Duration = 5 });
+            Program.Check(folderBox.Text == first, "The export folder did not start in the source video's folder.");
+            export.SetContext(new ExportContext { SourcePath = Path.Combine(second, "b.mkv"), Duration = 5 });
+            Program.Check(folderBox.Text == second, "The automatic export folder did not follow the next video.");
+            export.ApplyOutputFolderSelection(second);
+            export.SetContext(new ExportContext { SourcePath = Path.Combine(first, "c.mkv"), Duration = 5 });
+            Program.Check(folderBox.Text == second, "A browsed export folder was replaced by the next video's folder.");
+            folderBox.Text = "";
+            SettingsStore.SavePreferences(general.DefaultExportPresetName, first, shortcuts);
+            export.SetContext(new ExportContext { SourcePath = Path.Combine(second, "d.mkv"), Duration = 5 });
+            Program.Check(folderBox.Text == first, "The Preferences export folder was not used.");
+            SettingsStore.SavePreferences(general.DefaultExportPresetName, second, shortcuts);
+            export.ApplyDefaultOutputFolder();
+            Program.Check(folderBox.Text == second, "Changing the Preferences export folder did not apply.");
+        }
+        finally { SettingsStore.SavePreferences(general.DefaultExportPresetName, general.DefaultOutputFolder, shortcuts); }
+        Console.WriteLine("PASS UI export folder follows each video unless chosen, and follows Preferences");
     }
 
     private static async Task CheckCropTimeEditing(MainWindow main, IPlaybackEngine player)

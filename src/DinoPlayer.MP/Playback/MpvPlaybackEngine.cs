@@ -46,6 +46,8 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     [DllImport("user32.dll", ExactSpelling = true)]
     private static extern uint GetDoubleClickTime();
 
+    private static readonly TimeSpan PreparationTimeout = TimeSpan.FromSeconds(10);
+
     private readonly IntPtr _context;
     private readonly PlaybackWorker _worker;
     private readonly object _pendingOperationSync = new();
@@ -292,7 +294,12 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
                 CommandNative("seek", request.Seconds.ToString("0.###", CultureInfo.InvariantCulture), "absolute+exact");
                 return 0;
             }).ConfigureAwait(false);
-            await request.Completion.Task.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            try { await request.Completion.Task.WaitAsync(PreparationTimeout).ConfigureAwait(false); }
+            catch (TimeoutException)
+            {
+                throw new TimeoutException(
+                    $"The video did not finish preparing within {PreparationTimeout.TotalSeconds:0} seconds. Try opening it again.");
+            }
         }
         finally
         {

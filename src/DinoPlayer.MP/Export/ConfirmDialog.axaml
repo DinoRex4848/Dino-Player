@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="DinoPlayer.MP.Export.ConfirmDialog"
-        Title="Confirm action" Width="440" Height="175"
+        Title="Confirm action" Width="440" SizeToContent="Height"
         MinWidth="360" MinHeight="150"
         WindowStartupLocation="CenterOwner">
   <Grid Margin="14" RowDefinitions="*,Auto" RowSpacing="14">

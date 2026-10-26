@@ -8,6 +8,7 @@ public sealed partial class ExportPresetNameDialog : Window
     public ExportPresetNameDialog()
     {
         InitializeComponent();
+        Opened += (_, _) => NameBox.Focus();
     }
 
     private void SaveOnClick(object? sender, RoutedEventArgs eventArgs)
