@@ -110,40 +110,38 @@ public sealed partial class MainWindow
         ResetFullscreenTimeline();
     }
 
+    // Updates the existing timeline in place, so a changing duration estimate
+    // does not rebuild the canvas or interrupt a crop handle drag.
     private void SetTimelineDuration(double duration)
     {
         _durationSeconds = Math.Max(0, duration);
         _timelineSized = _durationSeconds > 0;
-        TimelineCanvas.Children.Clear();
-        _timelineMarkers.Clear();
-        _playhead = null;
-        _cropHighlight = null;
-        _cropStartThumb = null;
-        _cropEndThumb = null;
-        TimelineCanvas.Width = Math.Max(_durationSeconds * PixelsPerSecond, Math.Max(0, TimelineScroller.Viewport.Width - 2 * TimelineViewport.LabelGutter));
         TimelineStartLabel.Text = TimeFormat.Clock(0);
         TimelineEndLabel.Text = TimeFormat.Clock(_durationSeconds);
         SetFullscreenTimelineDuration(_durationSeconds);
         EnsurePlayhead();
-        DrawMinuteMarkers();
         if (CropToggle.IsChecked == true)
-        {
             EnsureCropVisuals();
-            UpdateCropVisuals();
-        }
+        FitTimeline(TimelineScroller.Viewport.Width);
     }
 
     private void TimelineScroller_SizeChanged(object? sender, SizeChangedEventArgs eventArgs)
     {
         if (_durationSeconds > 0)
-        {
-            TimelineCanvas.Width = Math.Max(_durationSeconds * PixelsPerSecond, Math.Max(0, eventArgs.NewSize.Width - 2 * TimelineViewport.LabelGutter));
-            DrawMinuteMarkers();
-            if (_playhead is not null)
-                Canvas.SetLeft(_playhead, TimeToX(_currentPos));
-            UpdateCropVisuals();
-        }
+            FitTimeline(eventArgs.NewSize.Width);
         UpdatePlayheadIndicators();
+    }
+
+    // Sizes the canvas for the duration (at least the visible width) and moves
+    // the minute markers, playhead and crop handles to match.
+    private void FitTimeline(double viewportWidth)
+    {
+        TimelineCanvas.Width = Math.Max(_durationSeconds * PixelsPerSecond,
+            Math.Max(0, viewportWidth - 2 * TimelineViewport.LabelGutter));
+        DrawMinuteMarkers();
+        if (_playhead is not null)
+            Canvas.SetLeft(_playhead, TimeToX(_currentPos));
+        UpdateCropVisuals();
     }
 
     private void EnsurePlayhead()

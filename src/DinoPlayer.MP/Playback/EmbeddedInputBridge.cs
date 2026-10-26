@@ -2,6 +2,17 @@ namespace DinoPlayer.MP.Playback;
 
 internal static class EmbeddedInputBridge
 {
+    // Each build extracts its own copy; remove copies left by earlier builds.
+    private static void RemoveOtherBuilds(string directory, string current)
+    {
+        foreach (var stale in Directory.EnumerateFiles(directory, "mpv-input-*.lua"))
+        {
+            if (string.Equals(stale, current, StringComparison.Ordinal)) continue;
+            try { File.Delete(stale); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
     public static string GetPath()
     {
         using var resource = typeof(EmbeddedInputBridge).Assembly.GetManifestResourceStream("DinoPlayer.MP.MpvInputBridge.lua")
@@ -23,6 +34,7 @@ internal static class EmbeddedInputBridge
             }
             finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
+        RemoveOtherBuilds(directory, path);
         return path;
     }
 }

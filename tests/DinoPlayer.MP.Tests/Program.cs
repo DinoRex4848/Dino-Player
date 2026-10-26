@@ -62,6 +62,27 @@ internal static class Program
                 File.WriteAllText(bridge, "damaged cache");
                 Check(EmbeddedInputBridge.GetPath() == bridge && File.ReadAllBytes(bridge).SequenceEqual(original),
                     "A damaged input bridge cache was reused.");
+                var staleBridge = Path.Combine(Path.GetDirectoryName(bridge)!, "mpv-input-00000000000000000000000000000000.lua");
+                File.WriteAllText(staleBridge, "old build");
+                Check(EmbeddedInputBridge.GetPath() == bridge && !File.Exists(staleBridge) && File.Exists(bridge),
+                    "An input bridge from an earlier build was left in the cache.");
+                return Task.CompletedTask;
+            });
+            await Test("old diagnostic logs are pruned, newest first", () =>
+            {
+                var logs = Directory.CreateDirectory(Path.Combine(Temp, "log-retention")).FullName;
+                var start = DateTime.UtcNow.AddDays(-30);
+                for (var i = 0; i < 25; i++)
+                {
+                    var file = Path.Combine(logs, $"dinoplayer-mp-{i:D2}.log");
+                    File.WriteAllText(file, "log");
+                    File.SetLastWriteTimeUtc(file, start.AddHours(i));
+                }
+                File.WriteAllText(Path.Combine(logs, "unrelated.txt"), "keep");
+                AppLog.PruneOldLogs(logs, AppLog.RetainedLogFiles - 1);
+                var kept = Directory.GetFiles(logs, "dinoplayer-mp-*.log").Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
+                Check(kept.Length == AppLog.RetainedLogFiles - 1 && kept[0] == "dinoplayer-mp-06.log" && kept[^1] == "dinoplayer-mp-24.log" &&
+                      File.Exists(Path.Combine(logs, "unrelated.txt")), $"Log pruning kept the wrong files: {string.Join(", ", kept)}");
                 return Task.CompletedTask;
             });
             await Test("export filters and speed range", () =>
@@ -232,7 +253,10 @@ internal static class Program
                 Check(after.General.ShowPlayerQueueButton && after.ExportPresets[1].Resolution == "3840x2160" &&
                       after.ExportPresets[1].VideoRateControl == "Quality" && after.ExportPresets[1].VideoQuality == "20", "4K quality preferences did not persist.");
                 var scaled = ExportCommandBuilder.Build(Options() with { Resolution = "3840x2160" });
-                Check(Value(scaled.Arguments, "-filter_complex")!.Contains("scale=3840:2160"), "4K dimensions were not passed to FFmpeg.");
+                Check(Value(scaled.Arguments, "-filter_complex")!.Contains("scale=-2:2160"), "The 4K height was not passed to FFmpeg.");
+                Check(Value(ExportCommandBuilder.Build(Options(0)).Arguments, "-filter_complex") is null &&
+                      Value(ExportCommandBuilder.Build(Options(0) with { Resolution = "640x480" }).Arguments, "-filter_complex") is null,
+                    "Source or unknown resolutions were scaled.");
                 return Task.CompletedTask;
             });
             await Test("export name and folder assembly preserve Unicode and selected format", () =>

@@ -5,6 +5,9 @@ namespace DinoPlayer.MP;
 
 internal static class AppLog
 {
+    // One log file is written per launch; older ones beyond this count are removed.
+    internal const int RetainedLogFiles = 20;
+    private const string LogFilePattern = "dinoplayer-mp-*.log";
     private static readonly object Sync = new();
     private static StreamWriter? _writer;
 
@@ -18,6 +21,7 @@ internal static class AppLog
         {
             var logDirectory = Path.Combine(RuntimePaths.DataDirectory, "logs");
             Directory.CreateDirectory(logDirectory);
+            PruneOldLogs(logDirectory, RetainedLogFiles - 1);
             LogPath = Path.Combine(logDirectory, $"dinoplayer-mp-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{Environment.ProcessId}.log");
             _writer = new StreamWriter(LogPath, append: false, new UTF8Encoding(false)) { AutoFlush = true };
         }
@@ -34,6 +38,22 @@ internal static class AppLog
         Info($"Session: XDG_SESSION_TYPE={Environment.GetEnvironmentVariable("XDG_SESSION_TYPE") ?? "(unset)"}; WAYLAND_DISPLAY={Environment.GetEnvironmentVariable("WAYLAND_DISPLAY") ?? "(unset)"}; DISPLAY={Environment.GetEnvironmentVariable("DISPLAY") ?? "(unset)"}");
         Info($"Command line: {Environment.CommandLine}");
         Info($"Log file: {LogPath}");
+    }
+
+    internal static void PruneOldLogs(string directory, int keep)
+    {
+        try
+        {
+            var stale = new DirectoryInfo(directory).GetFiles(LogFilePattern)
+                .OrderByDescending(file => file.LastWriteTimeUtc).ThenByDescending(file => file.Name, StringComparer.Ordinal)
+                .Skip(Math.Max(0, keep));
+            foreach (var file in stale)
+            {
+                try { file.Delete(); }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
     }
 
     public static void Info(string message) => Write("INFO", message);

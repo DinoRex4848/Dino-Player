@@ -116,14 +116,20 @@ public sealed partial class MainWindow
     {
         _audioPresetTimer.Stop();
         if (_player?.AudioTracks.Count > 0)
+        {
+            _audioPresetChanged = true;
             _audioPresetTimer.Start();
+        }
     }
 
     private void SavePendingAudioPreset(object? sender, EventArgs eventArgs) => FlushAudioPreset();
 
+    // Writes settings.json only when a track setting changed since the last save.
     private void FlushAudioPreset()
     {
         _audioPresetTimer.Stop();
+        if (!_audioPresetChanged) return;
+        _audioPresetChanged = false;
         SaveCurrentAudioPreset();
     }
 

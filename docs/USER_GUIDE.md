@@ -4,7 +4,7 @@
 
 Download the Windows x64 or Linux x64 ZIP from [Releases](https://github.com/DinoRex4848/Dino-Player/releases/latest). Extract the whole archive to a writable folder before starting the application. No separate .NET, mpv, or FFmpeg installation is required.
 
-Keep `settings.json` beside the executable: preferences and presets are stored there. Runtime logs and the playback script cache use a `data/` folder. Native libraries bundled by .NET are extracted to its user cache.
+Keep `settings.json` beside the executable: preferences and presets are stored there. Runtime logs and the playback script cache use a `data/` folder; the newest 20 logs are kept. Native libraries bundled by .NET are extracted to its user cache.
 
 Windows requires x64 Windows 10/11. Linux requires x64, glibc 2.35 or newer, X11/XWayland, working graphics/audio/font libraries, and suitable GPU drivers. If ZIP extraction removes executable permissions, run `chmod +x "Dino Player" ffmpeg install-desktop.sh`. Run `bash install-desktop.sh` after moving the Linux folder to its permanent location to add an optional applications-menu launcher.
 
@@ -18,13 +18,13 @@ Switch to **Video player** to watch, seek, select more clips, or open another vi
 
 Enable **Show Add to queue button in player** in Preferences to queue clips directly from the bottom left below the timeline. Each click captures the current crop, audio choices, and the settings currently selected in Export without switching tabs or pausing playback. A confirmation appears beside the button and fades out after eight seconds; another click restarts that display period. With Crop off, the full video is queued. The configured default export preset is applied on the first Export visit or first use of this button; later clicks keep your edits. The option is off by default.
 
-Video resolution includes **3840x2160 (4K)**. The dropdown beside the video bitrate field switches between **Bitrate** and **Target quality**, remembering each value separately. Target quality uses **CRF** for CPU encoding and **CQ** for GPU (NVENC) encoding. Lower values increase quality and output size varies with the content. Quality accepts whole numbers: CPU H.264/H.265 0–51, CPU AV1 0–63, NVENC H.264/H.265 1–51, and NVENC AV1 1–63. NVENC zero means automatic rather than a chosen target. Quality starts at 23. Copy disables rate controls, and Advanced uses your custom arguments. Resolution, rate mode, and quality are saved with export presets.
+Resolution sets the output height: **720p**, **1080p**, **1440p** or **2160p (4K)**. The width follows the source's shape, so ultrawide and 4:3 recordings keep their proportions with square pixels. The dropdown beside the video bitrate field switches between **Bitrate** and **Target quality**, remembering each value separately. Target quality uses **CRF** for CPU encoding and **CQ** for GPU (NVENC) encoding. Lower values increase quality and output size varies with the content. Quality accepts whole numbers: CPU H.264/H.265 0–51, CPU AV1 0–63, NVENC H.264/H.265 1–51, and NVENC AV1 1–63. NVENC zero means automatic rather than a chosen target. Quality starts at 23. Copy disables rate controls, and Advanced uses your custom arguments. Resolution, rate mode, and quality are saved with export presets.
 
 The FFmpeg log has a fixed height and internal scrollbars. It follows new output while you are at the bottom and preserves your position when you scroll back to inspect earlier lines.
 
 The queue list scrolls independently, keeping progress and queue controls in place as more clips are added. Small windows can also scroll the surrounding queue controls when needed. Default Export settings fit in a maximized 1920×1080 window at 100% scaling; paired fields return to separate rows when the settings pane is narrow.
 
-Output has separate **File name** and **Export folder** fields. Browse chooses a folder only. Select **MP4** or **MKV** under Video settings; the extension is added automatically and the format is saved with export presets. A pasted MP4/MKV suffix is removed from the base filename before the chosen extension is added.
+Output has separate **File name** and **Export folder** fields. Browse chooses a folder only. Until you choose one, the folder follows each video: the Preferences default location, or the video's own folder. A folder chosen with Browse is kept for later videos. Select **MP4** or **MKV** under Video settings; the extension is added automatically and the format is saved with export presets. A pasted MP4/MKV suffix is removed from the base filename before the chosen extension is added.
 
 Clips receive distinct output filenames automatically. **Overwrite existing file** allows replacing an existing file on disk, while queued clips still receive separate destinations. Exports write to a temporary file and publish it only after success; failure or cancellation removes incomplete output and preserves any original destination file.
 

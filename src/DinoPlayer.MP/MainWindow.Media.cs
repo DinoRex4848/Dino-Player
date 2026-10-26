@@ -63,7 +63,9 @@ public sealed partial class MainWindow
 
         _tabResumePlayback = null;
         await SelectWorkspaceTabAsync(false);
-        var player = _player;
+        // The native host can be recreated while the tab switch awaits.
+        if (_player is not { } player || _closing)
+            return;
         long generation = player.Generation;
         try
         {

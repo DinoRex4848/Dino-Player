@@ -41,6 +41,7 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherTimer _uiTimer;
     private readonly DispatcherTimer _mixTimer;
     private readonly DispatcherTimer _audioPresetTimer;
+    private bool _audioPresetChanged;
     private readonly DispatcherTimer _playerQueueStatusTimer;
     private readonly DispatcherTimer _fullscreenControlsTimer;
     private readonly DispatcherTimer _fullscreenCursorTimer;

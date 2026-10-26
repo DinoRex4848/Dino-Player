@@ -176,7 +176,7 @@ internal sealed class SettingsRepository
         {
             preset.Name = preset.Name.Trim();
             preset.Container = preset.Container == ExportNames.Mkv ? ExportNames.Mkv : ExportNames.Mp4;
-            preset.Resolution = preset.Resolution is "1280x720" or "1920x1080" or "2560x1440" or "3840x2160" ? preset.Resolution : ExportNames.SourceResolution;
+            preset.Resolution = ExportNames.IsFixedResolution(preset.Resolution) ? preset.Resolution : ExportNames.SourceResolution;
             preset.VideoCodecName = preset.VideoCodecName is ExportNames.H265 or ExportNames.Av1 or ExportNames.Copy ? preset.VideoCodecName : ExportNames.H264;
             preset.AudioCodecName = preset.AudioCodecName is ExportNames.Opus or ExportNames.Flac or ExportNames.Copy ? preset.AudioCodecName : ExportNames.Aac;
             preset.VideoPreset ??= "medium";

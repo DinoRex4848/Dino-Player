@@ -38,7 +38,7 @@ internal static class ExportCommandBuilder
         var audioCopy = !audioAdvanced && selectedAudio == ExportNames.Copy;
         var filterAudio = !audioAdvanced && !audioCopy && enabledTracks.Length > 0;
         var mergeAudio = filterAudio && !options.KeepTracksSeparate;
-        var scaleVideo = !videoAdvanced && !videoCopy && options.Resolution is string resolution && resolution != ExportNames.SourceResolution;
+        var scaleVideo = !videoAdvanced && !videoCopy && ExportNames.IsFixedResolution(options.Resolution);
         var filter = new StringBuilder();
 
         if (scaleVideo || copySpeed)
@@ -48,10 +48,11 @@ internal static class ExportCommandBuilder
                 filter.Append("setpts=(PTS-STARTPTS)/").Append(speed.ToString("0.###", CultureInfo.InvariantCulture));
             if (scaleVideo)
             {
-                var parts = options.Resolution.Split('x');
                 if (copySpeed)
                     filter.Append(',');
-                filter.Append($"scale={parts[0]}:{parts[1]}");
+                // Fixed height; -2 keeps the source's shape with an even width,
+                // so ultrawide and 4:3 clips keep square pixels.
+                filter.Append("scale=-2:").Append(ExportNames.ResolutionHeight(options.Resolution));
             }
             filter.Append("[vout];");
         }

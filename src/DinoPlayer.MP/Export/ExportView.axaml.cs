@@ -15,8 +15,8 @@ namespace DinoPlayer.MP.Export;
 
 public sealed partial class ExportView : UserControl, IDisposable
 {
-    private const string FourKResolution = "3840x2160 (4K)";
-    private static readonly string[] Resolutions = { ExportNames.SourceResolution, "1280x720", "1920x1080", "2560x1440", FourKResolution };
+    private static readonly (string Value, string Label)[] Resolutions =
+        [(ExportNames.SourceResolution, ExportNames.SourceResolution), .. ExportNames.FixedResolutions];
     private static readonly string[] VideoCodecs = { ExportNames.H264, ExportNames.H265, ExportNames.Av1, ExportNames.Copy };
     private static readonly string[] AudioCodecs = { ExportNames.Aac, ExportNames.Opus, ExportNames.Flac, ExportNames.Copy };
     private static readonly string[] LossyAudioBitrates = { "128k", "192k", "256k", "320k" };
@@ -40,8 +40,8 @@ public sealed partial class ExportView : UserControl, IDisposable
     private bool _showingQuality;
     private bool _updatingRateControl;
 
-    private string SelectedResolution => ResolutionCombo.SelectedItem as string == FourKResolution
-        ? "3840x2160" : ResolutionCombo.SelectedItem as string ?? ExportNames.SourceResolution;
+    private string SelectedResolution => Resolutions.FirstOrDefault(
+        resolution => resolution.Label == ResolutionCombo.SelectedItem as string, Resolutions[0]).Value;
 
     public ExportView()
     {
@@ -58,7 +58,8 @@ public sealed partial class ExportView : UserControl, IDisposable
         ContainerCombo.SelectedIndex = 0;
         ContainerCombo.SelectionChanged += (_, _) => MarkPresetDirty();
         OutputNameBox.LostFocus += (_, _) => OutputNameBox.Text = ExportDestination.NormalizeName(OutputNameBox.Text);
-        ResolutionCombo.ItemsSource = Resolutions;
+        ResolutionCombo.ItemsSource = Resolutions.Select(resolution => resolution.Label).ToArray();
+        ToolTip.SetTip(ResolutionCombo, "Output height. The width follows the source's shape, so ultrawide and 4:3 videos keep their proportions.");
         ResolutionCombo.SelectedIndex = 0;
         VideoCodecCombo.ItemsSource = VideoCodecs;
         VideoCodecCombo.SelectedIndex = 0;
@@ -357,8 +358,8 @@ public sealed partial class ExportView : UserControl, IDisposable
             {
                 VideoGpuCheck.IsChecked = preset.UseGpu;
                 RefreshVideoPresets();
-                ResolutionCombo.SelectedItem = preset.Resolution == "3840x2160" ? FourKResolution
-                    : Resolutions.Contains(preset.Resolution) ? preset.Resolution : ExportNames.SourceResolution;
+                ResolutionCombo.SelectedItem = Resolutions.FirstOrDefault(
+                    resolution => resolution.Value == preset.Resolution, Resolutions[0]).Label;
                 VideoPresetCombo.SelectedItem = VideoPresetCombo.Items.Cast<object>()
                     .Any(item => string.Equals(item?.ToString(), preset.VideoPreset, StringComparison.Ordinal))
                     ? preset.VideoPreset

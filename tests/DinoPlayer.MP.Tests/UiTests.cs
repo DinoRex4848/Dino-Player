@@ -99,7 +99,7 @@ internal static class UiTests
                 Call(export, "RefreshPresetNames", "UI test");
                 var presets = Control<ComboBox>(export, "PresetCombo");
                 presets.SelectedItem = "UI test";
-                Control<ComboBox>(export, "ResolutionCombo").SelectedItem = "1280x720";
+                Control<ComboBox>(export, "ResolutionCombo").SelectedItem = "720p";
                 Program.Check(presets.SelectedIndex == 0, "Resolution did not clear the active preset.");
                 presets.SelectedItem = "UI test";
                 Control<TextBox>(export, "VideoBitrateBox").Text = "6";
@@ -582,12 +582,12 @@ internal static class UiTests
         Program.Check(!mode.IsEnabled && !value.IsEnabled, "Copy allows editing rate control.");
         Control<ComboBox>(export, "VideoCodecCombo").SelectedItem = "H.264";
         Program.Check(mode.IsEnabled && value.Text == "29", "Leaving Copy lost the quality value.");
-        Control<ComboBox>(export, "ResolutionCombo").SelectedItem = "3840x2160 (4K)";
+        Control<ComboBox>(export, "ResolutionCombo").SelectedItem = "2160p (4K)";
         var preset = (ExportPreset)Call(export, "CapturePreset", "4K quality")!;
         SettingsStore.AddOrUpdateExportPreset(preset);
         Call(export, "ApplyPreset", SettingsStore.FindExportPreset(preset.Name));
         Program.Check(preset.Resolution == "3840x2160" && preset.VideoQuality == "29" &&
-                      Control<ComboBox>(export, "ResolutionCombo").SelectedItem as string == "3840x2160 (4K)",
+                      Control<ComboBox>(export, "ResolutionCombo").SelectedItem as string == "2160p (4K)",
             "4K label or quality preset round-trip failed.");
         await Task.Delay(100);
         Capture((Window)TopLevel.GetTopLevel(export)!, "export-quality.png");

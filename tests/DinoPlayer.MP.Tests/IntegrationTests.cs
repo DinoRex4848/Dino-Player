@@ -56,6 +56,27 @@ internal static class IntegrationTests
             Program.Check(video.GetProperty("width").GetInt32() == 3840 && video.GetProperty("height").GetInt32() == 2160,
                 "4K export dimensions differ from the selected resolution.");
         });
+        await Program.Test("FFmpeg fixed resolutions keep the source shape with square pixels", async () =>
+        {
+            foreach (var (size, expectedWidth) in new[] { ("640x480", 1440), ("860x360", 2580), ("1280x720", 1920) })
+            {
+                var shaped = Path.Combine(Program.Temp, $"shape-{size}.mp4");
+                await ProcessAsync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", $"testsrc2=size={size}:rate=30:duration=1",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", shaped]);
+                var output = Path.Combine(Program.Temp, $"shape-{size}-1080p.mp4");
+                await ExportAndVerify(Program.Options(0) with
+                {
+                    SourcePath = shaped, OutputPath = output, Duration = 1, Resolution = "1920x1080",
+                    CropEnabled = true, Start = 0, End = .2
+                }, 0);
+                var json = await ProcessAsync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,sample_aspect_ratio", "-of", "json", output]);
+                using var document = JsonDocument.Parse(json);
+                var video = document.RootElement.GetProperty("streams")[0];
+                var sar = video.TryGetProperty("sample_aspect_ratio", out var value) ? value.GetString() : "1:1";
+                Program.Check(video.GetProperty("width").GetInt32() == expectedWidth && video.GetProperty("height").GetInt32() == 1080 && sar == "1:1",
+                    $"A {size} source exported at 1080p as {video.GetProperty("width")}x{video.GetProperty("height")} with SAR {sar}.");
+            }
+        });
         var caseNumber = 0;
         foreach (var count in new[] { 0, 1, 4 })
         foreach (var separate in new[] { false, true })
