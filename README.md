@@ -7,7 +7,7 @@
 A Windows and Linux video player for reviewing gameplay, choosing audio tracks, and exporting clips.
 
 [![Build and tests](https://github.com/DinoRex4848/Dino-Player/actions/workflows/ci.yml/badge.svg)](https://github.com/DinoRex4848/Dino-Player/actions/workflows/ci.yml)
-[Download v1.5.2](https://github.com/DinoRex4848/Dino-Player/releases/tag/v1.5.2) · [User guide](docs/USER_GUIDE.md) · [Development](docs/DEVELOPMENT.md) · [Changelog](CHANGELOG.md)
+[Download v1.5.3](https://github.com/DinoRex4848/Dino-Player/releases/tag/v1.5.3) · [User guide](docs/USER_GUIDE.md) · [Development](docs/DEVELOPMENT.md) · [Changelog](CHANGELOG.md)
 
 ![Dino Player showing gameplay paused at 00:25](docs/images/player.png)
 
@@ -31,7 +31,7 @@ Get the ZIP for your platform from the [latest release](https://github.com/DinoR
 
 Keep the included `settings.json` beside the application to retain portable preferences. On Linux, run `bash install-desktop.sh` for an optional applications-menu entry. If needed, restore executable permissions with `chmod +x "Dino Player" ffmpeg install-desktop.sh`.
 
-Each release includes a `.sha256` file for verifying downloads. On Linux, run `sha256sum -c Dino-Player-v1.5.2.sha256` beside both downloaded ZIPs. On Windows, use `Get-FileHash -Algorithm SHA256` and compare the result with the checksum file.
+Each release includes a `.sha256` file for verifying downloads. On Linux, run `sha256sum -c Dino-Player-v1.5.3.sha256` beside both downloaded ZIPs. On Windows, use `Get-FileHash -Algorithm SHA256` and compare the result with the checksum file.
 
 The repository is currently private, so repository and release access require permission. Windows builds receive automated build and non-graphical regression checks; interactive Windows playback has not yet been validated. Linux uses X11 through XWayland on Wayland desktops.
 
