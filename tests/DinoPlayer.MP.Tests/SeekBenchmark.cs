@@ -115,7 +115,51 @@ internal static class SeekBenchmark
                             hardwareDecoder = snapshot.GetType().GetProperty("HardwareDecoder")!.GetValue(snapshot)
                         });
                     }
-                    Console.WriteLine("SEEK_BENCHMARK " + JsonSerializer.Serialize(new { assemblyPath, source, samples }));
+                    // While playing: how long after the last input playback is moving again.
+                    // Start positions vary so seeks land at different distances from a keyframe.
+                    var playing = new List<object>();
+                    foreach (var (name, key, modifiers, count, spacing) in new[]
+                             {
+                                 ("right", Key.Right, KeyModifiers.None, 1, 0), ("shift+right", Key.Right, KeyModifiers.Shift, 1, 0),
+                                 ("shift+left", Key.Left, KeyModifiers.Shift, 1, 0), ("shift+right x4", Key.Right, KeyModifiers.Shift, 4, 120),
+                                 ("shift+right held", Key.Right, KeyModifiers.Shift, 12, 35), ("click +1s", Key.None, KeyModifiers.None, 1, 0)
+                             })
+                    for (var trial = 0; trial < 6; trial++)
+                    {
+                        var start = 21 + trial * .7;
+                        var before = probe.Restarts;
+                        await PlayerCall(player, "SetPausedAsync", true);
+                        await PlayerCall(player, "SeekAsync", start);
+                        await SeekTests.Until(() => probe.Restarts > before && !probe.IsSeeking && Math.Abs(probe.Position - start) < .1);
+                        await PlayerCall(player, "SetPausedAsync", false);
+                        await Task.Delay(300);
+                        before = probe.Restarts;
+                        var first = Stopwatch.GetTimestamp();
+                        for (var i = 0; i < count; i++)
+                        {
+                            if (key == Key.None) Call(window, "SeekToPosition", probe.Position + 1);
+                            else root.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = key, KeyModifiers = modifiers });
+                            if (spacing > 0 && i + 1 < count) await Task.Delay(spacing);
+                        }
+                        var last = Stopwatch.GetTimestamp();
+                        await SeekTests.Until(() => probe.Restarts > before && !probe.IsSeeking);
+                        // Settled: no seek pending and the position advancing again.
+                        double moving;
+                        while (true)
+                        {
+                            var position = probe.Position;
+                            await Task.Delay(10);
+                            if (!probe.IsSeeking && Stopwatch.GetElapsedTime(probe.LastRestartTimestamp).TotalMilliseconds > 100 && probe.Position > position)
+                            {
+                                moving = Stopwatch.GetElapsedTime(last, probe.LastRestartTimestamp).TotalMilliseconds;
+                                break;
+                            }
+                        }
+                        playing.Add(new { scenario = name, start, afterLastInputMs = Math.Round(moving), restarts = probe.Restarts - before,
+                            totalMs = Math.Round(Stopwatch.GetElapsedTime(first, probe.LastRestartTimestamp).TotalMilliseconds) });
+                    }
+                    await PlayerCall(player, "SetPausedAsync", true);
+                    Console.WriteLine("SEEK_BENCHMARK " + JsonSerializer.Serialize(new { assemblyPath, source, samples, playing }));
                     result = 0;
                 }
                 finally { logEvent.RemoveEventHandler(null, log); }
