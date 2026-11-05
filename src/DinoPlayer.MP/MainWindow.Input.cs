@@ -80,7 +80,7 @@ public sealed partial class MainWindow
             HideFullscreenControls();
     }
 
-    private void Skip(double seconds)
+    private void Skip(double seconds, bool exact = false)
     {
         if (_player is null)
             return;
@@ -90,8 +90,22 @@ public sealed partial class MainWindow
             ShowFullscreenControls();
             BeginFullscreenScrollControlsGrace();
         }
-        RunPlayerAction(player => player.SeekRelativeAsync(seconds));
+        RunPlayerAction(player => exact ? player.SeekRelativeExactAsync(seconds) : player.SeekRelativeAsync(seconds));
     }
+
+    private void StepFrame(int direction)
+    {
+        if (_player is null || _durationSeconds <= 0)
+            return;
+
+        if (_isFullscreen)
+            ShowFullscreenControls();
+        RunPlayerAction(player => player.FrameStepAsync(direction));
+    }
+
+    // Synthetic key events (tests, some input methods) carry no physical key.
+    private static bool IsKey(KeyEventArgs eventArgs, Key key, PhysicalKey physicalKey) =>
+        eventArgs.PhysicalKey == physicalKey || (eventArgs.PhysicalKey == PhysicalKey.None && eventArgs.Key == key);
 
     private void MainWindowOnKeyDown(object? sender, KeyEventArgs eventArgs)
     {
@@ -108,6 +122,8 @@ public sealed partial class MainWindow
         }
         if (_exportTabSelected) return;
         var shortcuts = SettingsStore.GetPlaybackShortcuts();
+        var unmodified = (eventArgs.KeyModifiers &
+            (KeyModifiers.Shift | KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) == KeyModifiers.None;
         if (eventArgs.Key == Key.F11)
         {
             ToggleFullscreen();
@@ -149,14 +165,38 @@ public sealed partial class MainWindow
             RunPlayerAction(player => player.TogglePauseAsync());
             eventArgs.Handled = true;
         }
-        else if (eventArgs.Key == Key.Left)
+        else if (eventArgs.Key is Key.Left or Key.Right)
         {
-            Skip(-5);
+            // Shift moves one second exactly; otherwise jump about five seconds to a keyframe.
+            var direction = eventArgs.Key == Key.Right ? 1 : -1;
+            if ((eventArgs.KeyModifiers & KeyModifiers.Shift) != 0) Skip(direction * FineSkipSeconds, exact: true);
+            else Skip(direction * 5);
             eventArgs.Handled = true;
         }
-        else if (eventArgs.Key == Key.Right)
+        // The remaining player keys only act without modifiers, leaving
+        // combinations such as Ctrl+O to the system.
+        else if (unmodified && (IsKey(eventArgs, Key.OemPeriod, PhysicalKey.Period) || IsKey(eventArgs, Key.OemComma, PhysicalKey.Comma)))
         {
-            Skip(5);
+            StepFrame(IsKey(eventArgs, Key.OemPeriod, PhysicalKey.Period) ? 1 : -1);
+            eventArgs.Handled = true;
+        }
+        else if (unmodified && eventArgs.Key is Key.I or Key.O)
+        {
+            MarkCropFromShortcut(start: eventArgs.Key == Key.I);
+            eventArgs.Handled = true;
+        }
+        else if (unmodified && eventArgs.Key is Key.Up or Key.Down)
+        {
+            AdjustMasterVolume(eventArgs.Key == Key.Up ? 1 : -1, KeyboardVolumeStep);
+            if (_isFullscreen)
+                ShowFullscreenControls();
+            eventArgs.Handled = true;
+        }
+        else if (unmodified && eventArgs.Key == Key.M)
+        {
+            ToggleMasterMute();
+            if (_isFullscreen)
+                ShowFullscreenControls();
             eventArgs.Handled = true;
         }
     }

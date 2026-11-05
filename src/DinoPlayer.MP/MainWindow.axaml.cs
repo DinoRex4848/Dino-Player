@@ -26,6 +26,13 @@ public sealed partial class MainWindow : Window
     private static readonly TimeSpan PlayerQueueStatusFadeDuration = TimeSpan.FromMilliseconds(400);
     private static readonly Cursor FullscreenHiddenCursor = new(StandardCursorType.None);
     private static readonly Thickness NormalRootMargin = new(10);
+    private static readonly TimeSpan PlayheadFrameWatchdog = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan SeekDisplayTimeout = TimeSpan.FromSeconds(1.5);
+    private const double SeekDisplayTolerance = 0.25;
+    private static readonly TimeSpan ScrubSeekInterval = TimeSpan.FromMilliseconds(50);
+    private const double TimelineDragThreshold = 3;
+    private const double FineSkipSeconds = 1;
+    private const double KeyboardVolumeStep = 5;
 
     private readonly ExportManager _exportManager;
     private bool _exportTabSelected;
@@ -61,9 +68,24 @@ public sealed partial class MainWindow : Window
     private double _cropStart;
     private double _cropEnd;
     private Rectangle? _playhead;
+    // Slides the playhead between Canvas.Left updates while playing.
+    private Avalonia.Media.TranslateTransform? _playheadShift;
     private Rectangle? _cropHighlight;
     private Thumb? _cropStartThumb;
     private Thumb? _cropEndThumb;
+    private int _playheadFrameToken;
+    private long _playheadFrameRequestedAt;
+    // Position shown while dragging the timeline, a crop handle or the fullscreen slider.
+    private double? _scrubPosition;
+    private double? _scrubSeekPending;
+    private double? _scrubSeekSent;
+    private readonly DispatcherTimer _scrubSeekTimer;
+    private bool _isTimelinePointerDown;
+    private double _timelinePressX;
+    // Target of the latest seek from the UI, shown until the player reports it.
+    private (double Target, long Since)? _seekDisplayHold;
+    private string? _startupFile;
+    private bool _windowOpened;
     private readonly Dictionary<int, (Rectangle Line, TextBlock Label)> _timelineMarkers = new();
     private readonly Stack<(Rectangle Line, TextBlock Label)> _markerPool = new();
     private DateTimeOffset _lastStatsLog = DateTimeOffset.MinValue;
@@ -87,6 +109,10 @@ public sealed partial class MainWindow : Window
     internal MainWindow(ExportManager.RunExport? exportRunner)
     {
         InitializeComponent();
+        _scrubSeekTimer = new DispatcherTimer(ScrubSeekInterval, DispatcherPriority.Input, ScrubSeekTimerOnTick)
+        {
+            IsEnabled = false
+        };
         ClosingBehavior = WindowClosingBehavior.OwnerWindowOnly;
         _exportManager = new ExportManager(exportRunner, playerSource: () => _currentFilePath);
         var general = SettingsStore.Current.General;
@@ -111,7 +137,12 @@ public sealed partial class MainWindow : Window
         VideoBorder.SizeChanged += (_, _) => UpdateFullscreenPopupGeometry();
         SizeChanged += (_, _) => UpdateFullscreenPopupGeometry();
         WorkspaceGrid.SizeChanged += (_, _) => UpdateImportPrompt();
-        Opened += (_, _) => UpdateImportPrompt();
+        Opened += (_, _) =>
+        {
+            _windowOpened = true;
+            UpdateImportPrompt();
+            OpenStartupFileWhenReady();
+        };
         Activated += (_, _) =>
         {
             if (!CropStartBox.IsFocused && !CropEndBox.IsFocused) FocusPlayer();
@@ -124,8 +155,11 @@ public sealed partial class MainWindow : Window
             RunPlayerAction(player => player.TogglePauseAsync());
         };
         FullscreenTimelineSlider.ValueChanged += FullscreenTimelineSliderOnValueChanged;
-        FullscreenTimelineSlider.PointerPressed += FullscreenTimelineSliderOnPointerPressed;
-        FullscreenTimelineSlider.PointerReleased += FullscreenTimelineSliderOnPointerReleased;
+        // The slider's thumb handles its own presses, so listen before it does.
+        FullscreenTimelineSlider.AddHandler(PointerPressedEvent, FullscreenTimelineSliderOnPointerPressed,
+            RoutingStrategies.Tunnel, handledEventsToo: true);
+        FullscreenTimelineSlider.AddHandler(PointerReleasedEvent, FullscreenTimelineSliderOnPointerReleased,
+            RoutingStrategies.Tunnel, handledEventsToo: true);
         FullscreenTimelineSlider.PointerCaptureLost += FullscreenTimelineSliderOnPointerCaptureLost;
         FullscreenControlsPopup.AddHandler(KeyDownEvent, MainWindowOnKeyDown, RoutingStrategies.Tunnel);
         FullscreenControlsBar.AddHandler(KeyDownEvent, MainWindowOnKeyDown, RoutingStrategies.Tunnel);
@@ -135,8 +169,8 @@ public sealed partial class MainWindow : Window
         MuteAllButton.Click += (_, _) => ToggleMasterMute();
         SkipBackButton.Click += (_, _) => Skip(-5);
         SkipForwardButton.Click += (_, _) => Skip(5);
-        JumpCropStartButton.Click += (_, _) => RunPlayerAction(player => player.SeekAsync(_cropStart));
-        JumpCropEndButton.Click += (_, _) => RunPlayerAction(player => player.SeekAsync(_cropEnd));
+        JumpCropStartButton.Click += (_, _) => SeekToPosition(_cropStart);
+        JumpCropEndButton.Click += (_, _) => SeekToPosition(_cropEnd);
         SetCropStartButton.Click += (_, _) => SetCropStartToCurrent();
         SetCropEndButton.Click += (_, _) => SetCropEndToCurrent();
         CropToggle.IsCheckedChanged += CropToggleOnCheckedChanged;
@@ -221,6 +255,7 @@ public sealed partial class MainWindow : Window
             FullscreenMasterVolumeSlider.IsEnabled = true;
             AppLog.Info("Playback component initialized and ready.");
             if (_currentFilePath is { } path) LoadVideoCore(path, restorePlayback: true);
+            else OpenStartupFileWhenReady();
         }
         catch (Exception exception)
         {
@@ -235,6 +270,23 @@ public sealed partial class MainWindow : Window
                 ShowError(exception.Message);
             }
         }
+    }
+
+    /// <summary>Opens <paramref name="path"/> once playback is ready, for "Open with" and the command line.</summary>
+    internal void OpenOnStartup(string path) => _startupFile = path;
+
+    // mpv sets up its video output inside the native host as soon as a file
+    // loads, so wait until the window is open and has been laid out once.
+    private void OpenStartupFileWhenReady()
+    {
+        if (_startupFile is null || _player is null || _closing || !_windowOpened) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_startupFile is not { } path || _player is null || _closing || _currentFilePath is not null) return;
+            _startupFile = null;
+            AppLog.Info($"Opening the video from the command line: {path}");
+            LoadVideo(path);
+        }, DispatcherPriority.Background);
     }
 
     private bool IsCurrentMedia(IPlaybackEngine player, long generation) =>
@@ -322,6 +374,9 @@ public sealed partial class MainWindow : Window
         FlushAudioPreset();
         _uiTimer.Stop();
         _mixTimer.Stop();
+        EndScrub();
+        _isTimelinePointerDown = false;
+        _seekDisplayHold = null;
         HidePlayerQueueStatus();
         _fullscreenControlsTimer.Stop();
         _fullscreenCursorTimer.Stop();

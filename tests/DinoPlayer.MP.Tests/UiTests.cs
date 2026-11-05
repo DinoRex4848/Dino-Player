@@ -74,6 +74,7 @@ internal static class UiTests
                 await CheckCropToggleMemory(main, player);
                 await CheckPlaybackFocus(main, player);
                 await CheckRapidSeeking(main, player, source);
+                await CheckClipShortcuts(main, player);
                 var manager = Field<ExportManager>(main, "_exportManager");
                 var export = Control<ExportView>(main, "ExportPanel");
                 SettingsStore.AddOrUpdateExportPreset(new ExportPreset { Name = "First visit", VideoBitrate = "7" });
@@ -196,6 +197,7 @@ internal static class UiTests
                 await manager.WhenIdleAsync();
                 Program.Check(ExportManagerTests.Job(manager, firstQueued).Definition.Options.Start == .1 && ExportManagerTests.Job(manager, secondQueued).Definition.Options.Start == .9, "Queued crop snapshots changed.");
                 Console.WriteLine("PASS UI queue add, captured crops, selection, reorder, pause, resume and cancellation");
+                CheckShowInFolder(export, manager, secondQueued);
 
                 Click(export, "StartExportButton");
                 execution = await runner.Next();
@@ -592,6 +594,28 @@ internal static class UiTests
             "4K label or quality preset round-trip failed.");
         await Task.Delay(100);
         Capture((Window)TopLevel.GetTopLevel(export)!, "export-quality.png");
+
+        // Target size keeps its own value and shows the bitrate it works out to.
+        var hint = Control<TextBlock>(export, "TargetSizeHint");
+        Program.Check(!hint.IsVisible, "The size hint showed outside Target size.");
+        mode.SelectedIndex = 2;
+        Program.Check(value.Text == "10" && Control<TextBlock>(export, "VideoRateLabel").Text == "Size (MB)" &&
+                      hint.IsVisible && hint.Text!.Contains("of video for this"), $"Target size mode is wrong: {hint.Text}");
+        value.Text = "8";
+        var hasAudio = Field<ExportContext>(export, "_context").Tracks.Any(track => track.Enabled);
+        Control<ComboBox>(export, "AudioCodecCombo").SelectedItem = "FLAC";
+        Program.Check(!hasAudio || hint.Text!.Contains("AAC or Opus"), $"FLAC audio was accepted for Target size: {hint.Text}");
+        Control<ComboBox>(export, "AudioCodecCombo").SelectedItem = "AAC";
+        mode.SelectedIndex = 1;
+        Program.Check(value.Text == "29" && !hint.IsVisible, "Leaving Target size lost the quality value or kept the hint.");
+        mode.SelectedIndex = 2;
+        var sizePreset = (ExportPreset)Call(export, "CapturePreset", "UI size")!;
+        Program.Check(value.Text == "8" && sizePreset is { VideoRateControl: "Size", VideoTargetSize: "8" }, "Target size did not reach the preset.");
+        Call(export, "ApplyPreset", original);
+        Call(export, "ApplyPreset", sizePreset);
+        Program.Check(mode.SelectedIndex == 2 && value.Text == "8" && hint.IsVisible, "A Target size preset did not load.");
+        await Task.Delay(100);
+        Capture((Window)TopLevel.GetTopLevel(export)!, "export-target-size.png");
         Call(export, "ApplyPreset", original);
         await Task.Delay(100);
     }
@@ -776,6 +800,156 @@ internal static class UiTests
                 Math.Abs(Control<Slider>(main, "FullscreenTimelineSlider").Value - target) < .4 &&
                 Math.Abs(Canvas.GetLeft(playhead) - expectedX) < 1;
         }
+    }
+
+    // Runs with the 200 ms UI timer stopped, so every update must come from
+    // native notifications, the playhead frame loop or the input itself.
+    private static async Task CheckClipShortcuts(MainWindow main, IPlaybackEngine player)
+    {
+        var root = Control<Grid>(main, "RootGrid");
+        var crop = Control<ToggleButton>(main, "CropToggle");
+        var masterVolume = Control<Slider>(main, "MasterVolumeSlider");
+        var playPause = Control<Button>(main, "PlayPauseButton");
+        var duration = player.GetSnapshot().DurationSeconds;
+        Program.Check(duration >= 4, "The UI test video must be at least four seconds long.");
+        var uiTimer = Field<DispatcherTimer>(main, "_uiTimer");
+        uiTimer.Stop();
+        try
+        {
+            await player.SetPausedAsync(true);
+            await SeekSettled(player, 1);
+            PressKey(root, Key.Space);
+            await Until(() => AutomationProperties.GetName(playPause) == "Pause");
+            var positions = new HashSet<double>();
+            for (var i = 0; i < 25; i++)
+            {
+                positions.Add(Field<double>(main, "_currentPos"));
+                await Task.Delay(16);
+            }
+            Program.Check(positions.Count >= 8, $"The playhead moved {positions.Count} times in 400 ms of playback.");
+            PressKey(root, Key.Space);
+            await Until(() => AutomationProperties.GetName(playPause) == "Play");
+            Console.WriteLine("PASS UI play/pause icon and smooth playhead update without the polling timer");
+
+            crop.IsChecked = false;
+            Call(main, "SetCropValues", 0d, 0d);
+            await SeekSettled(player, 1);
+            PressKey(root, Key.I);
+            await Until(() => crop.IsChecked == true && Math.Abs(Field<double>(main, "_cropStart") - 1) < .05);
+            Program.Check(Math.Abs(Field<double>(main, "_cropEnd") - Math.Min(11, duration)) < .05, "A first In mark did not select ten seconds.");
+            await SeekSettled(player, 3);
+            PressKey(root, Key.O);
+            await Until(() => Math.Abs(Field<double>(main, "_cropEnd") - 3) < .05 && Math.Abs(Field<double>(main, "_cropStart") - 1) < .05);
+            var ctrlO = new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.O, KeyModifiers = KeyModifiers.Control };
+            root.RaiseEvent(ctrlO);
+            Program.Check(!ctrlO.Handled, "Ctrl+O was taken by the crop shortcut.");
+            Console.WriteLine("PASS UI I and O mark exact crop points and turn Crop on");
+
+            var start = await player.GetPositionAsync();
+            PressKey(root, Key.OemPeriod, PhysicalKey.Period);
+            await Until(() => player.GetSnapshot().IsPaused && player.GetSnapshot().PositionSeconds > start + .001);
+            Program.Check(player.GetSnapshot().PositionSeconds - start < .1, "Period moved more than one frame.");
+            PressKey(root, Key.OemComma, PhysicalKey.Comma);
+            await Until(() => player.GetSnapshot().IsPaused && !player.GetSnapshot().IsSeeking &&
+                              Math.Abs(player.GetSnapshot().PositionSeconds - start) < .005);
+            root.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Right, KeyModifiers = KeyModifiers.Shift });
+            await Until(() => !player.GetSnapshot().IsSeeking && Math.Abs(player.GetSnapshot().PositionSeconds - (start + 1)) < .02);
+            Program.Check(player.GetSnapshot().IsPaused, "Frame or fine steps resumed playback.");
+            Console.WriteLine("PASS UI frame steps and exact one-second Shift+arrow steps");
+
+            masterVolume.Value = 50;
+            PressKey(root, Key.Up);
+            Program.Check(masterVolume.Value == 55, "Up did not raise master volume by five.");
+            PressKey(root, Key.Down);
+            PressKey(root, Key.Down);
+            Program.Check(masterVolume.Value == 45, "Down did not lower master volume by five.");
+            PressKey(root, Key.M);
+            Program.Check(masterVolume.Value == 0, "M did not mute.");
+            PressKey(root, Key.M);
+            Program.Check(masterVolume.Value == 45, "M did not restore the volume.");
+            masterVolume.Value = 0; // Keep automated desktop tests silent.
+            Console.WriteLine("PASS UI Up/Down volume and M mute");
+
+            var canvas = Control<Canvas>(main, "TimelineCanvas");
+            Control<ScrollViewer>(main, "TimelineScroller").Offset = default;
+            await Task.Delay(50);
+            var from = (double)Call(main, "TimeToX", 1d)!;
+            var to = (double)Call(main, "TimeToX", Math.Min(3.5, duration - .5))!;
+            var target = (double)Call(main, "XToTime", to)!;
+            DragTimeline(canvas, from, to, beforeRelease: () =>
+            {
+                Program.Check(Field<double?>(main, "_scrubPosition") is { } scrub && Math.Abs(scrub - target) < .001 &&
+                              Math.Abs(Canvas.GetLeft(Field<Control>(main, "_playhead")) - to) < 1,
+                    "The playhead did not follow a timeline drag.");
+            });
+            Program.Check(Field<double?>(main, "_scrubPosition") is null, "Releasing a timeline drag left it scrubbing.");
+            await Until(() => !player.GetSnapshot().IsSeeking && Math.Abs(player.GetSnapshot().PositionSeconds - target) < .05);
+            Program.Check(Math.Abs(Canvas.GetLeft(Field<Control>(main, "_playhead")) - to) < 1, "The playhead left the drag's end.");
+
+            var startThumb = Field<Thumb>(main, "_cropStartThumb");
+            startThumb.RaiseEvent(new VectorEventArgs { RoutedEvent = Thumb.DragDeltaEvent, Vector = new Vector(2, 0) });
+            var handle = Field<double>(main, "_cropStart");
+            startThumb.RaiseEvent(new VectorEventArgs { RoutedEvent = Thumb.DragCompletedEvent });
+            await Until(() => !player.GetSnapshot().IsSeeking && Math.Abs(player.GetSnapshot().PositionSeconds - handle) < .05);
+            crop.IsChecked = false;
+            Call(main, "SetCropValues", 0d, 0d);
+            Console.WriteLine("PASS UI timeline and crop handle drags preview and land exactly");
+        }
+        finally
+        {
+            await player.SetPausedAsync(true);
+            uiTimer.Start();
+        }
+
+        static async Task SeekSettled(IPlaybackEngine player, double seconds)
+        {
+            await player.SeekAsync(seconds);
+            await Until(() => player.GetSnapshot().IsPaused && !player.GetSnapshot().IsSeeking &&
+                              Math.Abs(player.GetSnapshot().PositionSeconds - seconds) < .05);
+        }
+    }
+
+    private static void DragTimeline(Canvas canvas, double fromX, double toX, Action beforeRelease)
+    {
+        using var pointer = new Avalonia.Input.Pointer(2, PointerType.Mouse, true);
+        var down = new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed);
+        var moving = new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.Other);
+        var up = new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased);
+        var root = TopLevel.GetTopLevel(canvas)!;
+        Point At(double x) => canvas.TranslatePoint(new Point(x, canvas.Bounds.Height / 2), root)!.Value;
+        canvas.RaiseEvent(new PointerPressedEventArgs(canvas, pointer, root, At(fromX), 0, down, KeyModifiers.None, 1));
+        foreach (var step in new[] { .25, .5, .75, 1 })
+            canvas.RaiseEvent(new PointerEventArgs(InputElement.PointerMovedEvent, canvas, pointer, root,
+                At(fromX + (toX - fromX) * step), 0, moving, KeyModifiers.None));
+        beforeRelease();
+        canvas.RaiseEvent(new PointerReleasedEventArgs(canvas, pointer, root, At(toX), 0, up, KeyModifiers.None, MouseButton.Left));
+    }
+
+    private static void CheckShowInFolder(ExportView export, ExportManager manager, Guid unfinished)
+    {
+        var list = Control<ListBox>(export, "QueueList");
+        var button = Control<Button>(export, "ShowInFolderButton");
+        list.SelectedItem = null;
+        Call(export, "RefreshQueue");
+        var latest = manager.GetSnapshot().Jobs.Last(job => job.State == ExportJobState.Completed).Definition.Options.OutputPath;
+        Program.Check(button.IsEnabled && Field<string>(export, "_showInFolderPath") == latest,
+            "Show in folder did not offer the latest finished clip.");
+        list.SelectedIndex = manager.GetSnapshot().Jobs.ToList().FindIndex(job => job.Id == unfinished);
+        Call(export, "RefreshQueue");
+        Program.Check(!button.IsEnabled, "Show in folder was offered for a clip that did not finish.");
+        list.SelectedItem = null;
+        Call(export, "RefreshQueue");
+        // Hide the test output so the click reports it missing instead of opening a file manager window.
+        var hidden = latest + ".hidden";
+        File.Move(latest, hidden);
+        try
+        {
+            Click(export, "ShowInFolderButton");
+            Program.Check(Control<TextBlock>(export, "StatusText").Text?.StartsWith("Could not open the folder") == true,
+                "A missing export was not reported by Show in folder.");
+        }
+        finally { File.Move(hidden, latest); }
+        Console.WriteLine("PASS UI Show in folder follows the selected or latest finished clip");
     }
 
     private static async Task CheckPlaybackFocus(MainWindow main, IPlaybackEngine player, bool fullscreen = false)

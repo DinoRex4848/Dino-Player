@@ -51,20 +51,26 @@ public sealed partial class MainWindow
     private void FullscreenTimelineSliderOnPointerReleased(object? sender, PointerReleasedEventArgs eventArgs)
     {
         _isFullscreenTimelinePointerDown = false;
+        CompleteScrub();
         if (_isFullscreen)
             ShowFullscreenControls();
     }
 
-    private void FullscreenTimelineSliderOnPointerCaptureLost(object? sender, PointerCaptureLostEventArgs eventArgs) =>
+    private void FullscreenTimelineSliderOnPointerCaptureLost(object? sender, PointerCaptureLostEventArgs eventArgs)
+    {
         _isFullscreenTimelinePointerDown = false;
+        CompleteScrub();
+    }
 
+    // Clicks seek exactly; drags preview and land exactly on release.
     private void FullscreenTimelineSliderOnValueChanged(object? sender, RangeBaseValueChangedEventArgs eventArgs)
     {
         if (_isApplyingFullscreenSliderValue || !_isFullscreen || _durationSeconds <= 0)
             return;
 
         ShowFullscreenControls();
-        RunPlayerAction(player => player.SeekAsync(eventArgs.NewValue));
+        if (_isFullscreenTimelinePointerDown) UpdateScrub(eventArgs.NewValue);
+        else SeekToPosition(eventArgs.NewValue);
     }
 
     private bool CanUseFullscreen => !_exportTabSelected && _player is not null && _durationSeconds > 0 && !string.IsNullOrWhiteSpace(_currentFilePath);
@@ -107,6 +113,11 @@ public sealed partial class MainWindow
         }
 
         _isFullscreen = false;
+        if (_isFullscreenTimelinePointerDown)
+        {
+            _isFullscreenTimelinePointerDown = false;
+            CompleteScrub();
+        }
         _fullscreenControlsTimer.Stop();
         _fullscreenCursorTimer.Stop();
         _fullscreenScrollGraceTimer.Stop();

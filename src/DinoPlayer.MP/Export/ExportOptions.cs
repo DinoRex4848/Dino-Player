@@ -20,6 +20,7 @@ internal sealed record ExportOptions
     public string VideoBitrate { get; init; } = "8";
     public string VideoRateControl { get; init; } = ExportNames.Bitrate;
     public string VideoQuality { get; init; } = "23";
+    public string VideoTargetSize { get; init; } = TargetSize.DefaultMegabytes;
     public bool UseGpu { get; init; }
     public string AudioCodec { get; init; } = ExportNames.Aac;
     public string AudioBitrate { get; init; } = "192k";

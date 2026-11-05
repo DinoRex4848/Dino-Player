@@ -269,6 +269,45 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         return deltaSeconds == 0 ? Task.CompletedTask : QueueSeek(deltaSeconds, "relative+keyframes");
     }
 
+    public Task SeekRelativeExactAsync(double deltaSeconds)
+    {
+        ThrowIfDisposed();
+        if (!double.IsFinite(deltaSeconds)) throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
+        return deltaSeconds == 0 ? Task.CompletedTask : QueueSeek(deltaSeconds, "relative+exact");
+    }
+
+    public Task SeekPreviewAsync(double seconds)
+    {
+        ThrowIfDisposed();
+        if (!double.IsFinite(seconds)) throw new ArgumentOutOfRangeException(nameof(seconds));
+        return QueueSeek(Math.Max(0, seconds), "absolute+keyframes");
+    }
+
+    public Task FrameStepAsync(int direction)
+    {
+        ThrowIfDisposed();
+        if (direction == 0) return Task.CompletedTask;
+        var generation = Generation;
+        return QueueNativeOperation("frame step", () =>
+        {
+            if (generation != Generation || _activeGeneration != generation || !_mediaLoaded) return;
+            // Stepping past either end is not an error worth a banner.
+            try { CommandNative(direction > 0 ? "frame-step" : "frame-back-step"); }
+            catch (InvalidOperationException exception) { AppLog.Warn($"Frame step ignored: {exception.Message}"); }
+        });
+    }
+
+    public Task<double> GetPositionAsync()
+    {
+        return InvokeOnMpvThreadAsync(() =>
+        {
+            var cached = GetSnapshot().PositionSeconds;
+            if (!_mediaLoaded || _activeGeneration != Generation) return cached;
+            var position = GetDoubleNative("time-pos", cached);
+            return double.IsFinite(position) ? Math.Max(0, position) : cached;
+        });
+    }
+
     public Task SeekAndWaitAsync(double seconds)
     {
         ThrowIfDisposed();
@@ -423,7 +462,10 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         GetStringNative("current-gpu-context") ?? "unknown",
         GetStringNative("hwdec-current") ?? "none",
         GetInt64Native("decoder-frame-drop-count", 0),
-        GetInt64Native("frame-drop-count", 0)) { Generation = _activeGeneration, IsLoaded = _mediaLoaded };
+        GetInt64Native("frame-drop-count", 0))
+    {
+        Generation = _activeGeneration, IsLoaded = _mediaLoaded, SampleTimestamp = Stopwatch.GetTimestamp()
+    };
 
     private void PollEvent()
     {
@@ -438,7 +480,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         }
     }
 
-    private void RefreshPosition(bool notify = false)
+    private void RefreshPosition(bool notify = false, bool? seeking = null)
     {
         if (!_mediaLoaded || _activeGeneration != Generation) return;
         _lastPositionSample = Stopwatch.GetTimestamp();
@@ -446,7 +488,9 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         var position = GetDoubleNative("time-pos", current.PositionSeconds);
         Volatile.Write(ref _snapshot, current with
         {
-            PositionSeconds = double.IsFinite(position) ? Math.Max(0, position) : current.PositionSeconds
+            PositionSeconds = double.IsFinite(position) ? Math.Max(0, position) : current.PositionSeconds,
+            SampleTimestamp = _lastPositionSample,
+            IsSeeking = seeking ?? current.IsSeeking
         });
         if (!notify) return;
         try { PositionChanged?.Invoke(_activeGeneration); }
@@ -483,6 +527,10 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             _ => snapshot
         };
         Volatile.Write(ref _snapshot, snapshot);
+        // Show pause and speed changes at once, with a fresh position so the
+        // playhead neither jumps back on pause nor drifts after a speed change.
+        if ((ObservedProperty)ev.ReplyUserData is ObservedProperty.Paused or ObservedProperty.Speed)
+            RefreshPosition(notify: true);
     }
 
     private void HandleEvent(MpvNative.MpvEvent mpvEvent)
@@ -521,14 +569,14 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
                 TryApplyPendingAudioMix("video-reconfig");
                 break;
             case MpvEventSeek:
-                RefreshPosition(notify: true);
+                RefreshPosition(notify: true, seeking: true);
                 break;
             case MpvEventPlaybackRestart:
                 if (_activeGeneration != Generation) break;
                 _videoReady = true;
                 LogAndValidateOutput("playback-restart");
                 TryApplyPendingAudioMix("playback-restart");
-                RefreshPosition(notify: true);
+                RefreshPosition(notify: true, seeking: false);
                 CompleteReadySeek();
                 break;
         }

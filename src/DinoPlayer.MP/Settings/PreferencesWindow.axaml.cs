@@ -83,7 +83,8 @@ public sealed partial class PreferencesWindow : Window
         {
             if (PlaybackShortcut.Conflicts(_speedUpKey, _speedUpModifiers, _speedDownKey, _speedDownModifiers))
                 throw new InvalidOperationException("Speed up and slow down shortcuts must be different.");
-            if (PlaybackShortcut.IsReserved(_speedUpKey) || PlaybackShortcut.IsReserved(_speedDownKey))
+            if (PlaybackShortcut.IsPlayerKey(_speedUpKey, _speedUpModifiers) ||
+                PlaybackShortcut.IsPlayerKey(_speedDownKey, _speedDownModifiers))
                 throw new InvalidOperationException("That key is already used for playback or window navigation.");
             SettingsStore.SavePreferences(presetName, DefaultOutputFolderBox.Text, new PlaybackShortcutSettings
             {

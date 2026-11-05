@@ -44,8 +44,9 @@ cat > "$desktop_file" <<EOF
 Type=Application
 Name=Dino Player
 Comment=Play videos and export clips
-Exec=/bin/sh -c $(desktop_command 'exec "$1"') DinoPlayer.MP $(desktop_command "$app_executable")
+Exec=/bin/sh -c $(desktop_command 'app=$1; shift; exec "$app" "$@"') DinoPlayer.MP $(desktop_command "$app_executable") %f
 Icon=$app_id
+MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/mp2t;video/x-m4v;
 Terminal=false
 Categories=AudioVideo;Video;Player;
 StartupNotify=true

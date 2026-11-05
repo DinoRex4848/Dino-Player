@@ -227,14 +227,14 @@ public sealed partial class MainWindow
         RunPlayerAction(player => player.SetMasterVolumeAsync(value));
     }
 
-    private void AdjustMasterVolume(double delta)
+    private void AdjustMasterVolume(double delta, double step = 1)
     {
         var direction = Math.Sign(delta);
         if (direction == 0)
             return;
 
         MasterVolumeSlider.Value = Math.Clamp(
-            Math.Round(MasterVolumeSlider.Value) + direction,
+            Math.Round(MasterVolumeSlider.Value) + direction * step,
             MasterVolumeSlider.Minimum,
             MasterVolumeSlider.Maximum);
     }

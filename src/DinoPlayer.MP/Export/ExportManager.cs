@@ -334,29 +334,38 @@ internal sealed class ExportManager
                     throw new IOException("The destination was created after this clip was queued. Remove the clip and add it again to choose a new filename.");
             }
             var cancellation = job.Cancellation!;
-            var result = await _run(_resolveExecutable(), definition.Command,
-                line => { lock (_gate) if (ReferenceEquals(job.Cancellation, cancellation)) job.Log.Append(line); },
-                value =>
-                {
-                    lock (_gate)
-                        if (ReferenceEquals(job.Cancellation, cancellation) && job.State == ExportJobState.Exporting && double.IsFinite(value))
-                            job.Progress = Math.Clamp(value, 0, 100);
-                }, cancellation.Token).ConfigureAwait(false);
-            lock (_gate)
+            var command = definition.Command;
+            long? previousSize = null;
+            while (true)
             {
-                if (job.State == ExportJobState.Cancelling || result.Cancelled)
-                    job.State = ExportJobState.Cancelled;
-                else if (result.Error is not null || result.ExitCode != 0)
-                    Fail(job, result.Error ?? $"FFmpeg failed with exit code {result.ExitCode}.");
-                else
+                var result = await _run(_resolveExecutable(), command,
+                    line => { lock (_gate) if (ReferenceEquals(job.Cancellation, cancellation)) job.Log.Append(line); },
+                    value =>
+                    {
+                        lock (_gate)
+                            if (ReferenceEquals(job.Cancellation, cancellation) && job.State == ExportJobState.Exporting && double.IsFinite(value))
+                                job.Progress = Math.Clamp(value, 0, 100);
+                    }, cancellation.Token).ConfigureAwait(false);
+                var succeeded = !result.Cancelled && result.Error is null && result.ExitCode == 0;
+                if (!succeeded || command.SizeLimit is not { } limit) { Finish(result); return; }
+                var size = new FileInfo(definition.TemporaryPath).Length;
+                var check = TargetSize.Check(limit, size, previousSize);
+                lock (_gate)
                 {
-                    // Recheck the live player source before replacing an existing
-                    // file: the user may have opened the destination during export.
-                    ValidateDestination(definition.Options.OutputPath, definition.Options.SourcePath);
-                    File.Move(definition.TemporaryPath, definition.Options.OutputPath, definition.Options.Overwrite);
-                    job.Progress = 100;
-                    job.State = ExportJobState.Completed;
-                    job.Log.Append("Export complete.");
+                    if (job.State == ExportJobState.Cancelling) { job.State = ExportJobState.Cancelled; return; }
+                    if (!check.Fits && check.Retry is null) { Fail(job, check.Message); return; }
+                    job.Log.Append(check.Message);
+                }
+                if (check.Fits) { Finish(result); return; }
+                // Encode again from the start, into the same temporary file.
+                previousSize = size;
+                command = ExportCommandBuilder.Build(definition.Options with { OutputPath = definition.TemporaryPath, Overwrite = false }, check.Retry);
+                File.Delete(definition.TemporaryPath);
+                lock (_gate)
+                {
+                    if (job.State == ExportJobState.Cancelling) { job.State = ExportJobState.Cancelled; return; }
+                    job.Progress = 0;
+                    job.Log.Append($"ffmpeg {string.Join(" ", command.Arguments.Select(QuoteForLog))}");
                 }
             }
         }
@@ -375,6 +384,27 @@ internal sealed class ExportManager
             {
                 job.Log.Append($"Could not remove incomplete output {definition.TemporaryPath}: {exception.Message}");
                 AppLog.Warn($"Export temporary-file cleanup failed: {exception.Message}");
+            }
+        }
+
+        void Finish(FfmpegResult result)
+        {
+            lock (_gate)
+            {
+                if (job.State == ExportJobState.Cancelling || result.Cancelled)
+                    job.State = ExportJobState.Cancelled;
+                else if (result.Error is not null || result.ExitCode != 0)
+                    Fail(job, result.Error ?? $"FFmpeg failed with exit code {result.ExitCode}.");
+                else
+                {
+                    // Recheck the live player source before replacing an existing
+                    // file: the user may have opened the destination during export.
+                    ValidateDestination(definition.Options.OutputPath, definition.Options.SourcePath);
+                    File.Move(definition.TemporaryPath, definition.Options.OutputPath, definition.Options.Overwrite);
+                    job.Progress = 100;
+                    job.State = ExportJobState.Completed;
+                    job.Log.Append("Export complete.");
+                }
             }
         }
     }

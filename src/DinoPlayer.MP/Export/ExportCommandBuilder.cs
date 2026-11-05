@@ -3,13 +3,17 @@ using System.Text;
 
 namespace DinoPlayer.MP.Export;
 
-internal sealed record ExportCommand(IReadOnlyList<string> Arguments, double DurationSeconds, string? Warning);
+/// <summary>An FFmpeg run. <paramref name="SizeLimit"/> is set for Target size exports.</summary>
+internal sealed record ExportCommand(IReadOnlyList<string> Arguments, double DurationSeconds, string? Warning,
+    SizeLimit? SizeLimit = null);
 
 internal static class ExportCommandBuilder
 {
-    public static ExportCommand Build(ExportOptions options)
+    /// <summary>Builds the FFmpeg arguments. <paramref name="sizeRetry"/> replaces a Target size export's planned bitrate.</summary>
+    public static ExportCommand Build(ExportOptions options, SizeLimit? sizeRetry = null)
     {
         Validate(options);
+        SizeLimit? sizeLimit = null;
         var outputPath = options.OutputPath.Trim();
         var videoFlags = options.VideoAdvanced ? ParseArguments(options.VideoAdvancedText) : [];
         var audioFlags = options.AudioAdvanced && options.Tracks.Any(t => t.Enabled) ? ParseArguments(options.AudioAdvancedText) : [];
@@ -139,6 +143,19 @@ internal static class ExportCommandBuilder
                     ? new[] { "-rc", "vbr", "-cq", quality, "-b:v", "0" }
                     : new[] { "-crf", quality });
             }
+            else if (options.VideoRateControl == ExportNames.Size)
+            {
+                sizeLimit = sizeRetry ?? TargetSize.Plan(options);
+                var rate = $"{sizeLimit.VideoKbps.ToString(CultureInfo.InvariantCulture)}k";
+                if (options.UseGpu) args.AddRange(new[] { "-rc", "vbr" });
+                args.AddRange(new[] { "-b:v", rate });
+                // Capping the rate bounds the whole file: at most one buffer over the bitrate.
+                if (TargetSize.HasRateCap(options))
+                {
+                    var buffer = Math.Max(1, (int)(sizeLimit.VideoKbps * TargetSize.BufferSeconds(sizeLimit.Seconds)));
+                    args.AddRange(new[] { "-maxrate", rate, "-bufsize", $"{buffer.ToString(CultureInfo.InvariantCulture)}k" });
+                }
+            }
             else
                 args.AddRange(new[] { "-b:v", $"{double.Parse(options.VideoBitrate, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture)}M" });
             args.AddRange(new[] { "-pix_fmt", encoder.Contains("264", StringComparison.Ordinal) ? "yuv420p" : "yuv420p10le" });
@@ -171,10 +188,16 @@ internal static class ExportCommandBuilder
             args.AddRange(new[] { "-movflags", "+faststart" });
         args.Add(options.Overwrite ? "-y" : "-n");
         args.Add(outputPath);
-        var seconds = (options.CropEnabled ? options.End - options.Start : options.Duration) / speed;
-        return new ExportCommand(args.AsReadOnly(), seconds,
+        return new ExportCommand(args.AsReadOnly(), OutputSeconds(options),
             options.CropEnabled && (videoCopy || audioCopy)
-                ? "Stream-copy trimming starts on keyframes and may be slightly offset." : null);
+                ? "Stream-copy trimming starts on keyframes and may be slightly offset." : null, sizeLimit);
+    }
+
+    /// <summary>Length of the exported clip: the crop or the full video, divided by any copied speed.</summary>
+    public static double OutputSeconds(ExportOptions options)
+    {
+        var speed = options.CopyPlaybackSpeed ? NormalizePlaybackSpeed(options.PlaybackSpeed) : 1;
+        return (options.CropEnabled ? options.End - options.Start : options.Duration) / speed;
     }
 
     private static double NormalizePlaybackSpeed(double speed) =>
@@ -212,8 +235,11 @@ internal static class ExportCommandBuilder
             options.Start < 0 || options.End <= options.Start || options.End > options.Duration))
             throw new ArgumentException("The crop end must be after its start and within the source duration.");
         if (!options.VideoAdvanced && options.VideoCodec != ExportNames.Copy)
+        {
             VideoRateControl.Validate(options.VideoRateControl, options.VideoBitrate, options.VideoQuality,
-                options.VideoCodec, options.UseGpu);
+                options.VideoTargetSize, options.VideoCodec, options.UseGpu);
+            if (options.VideoRateControl == ExportNames.Size) TargetSize.Plan(options);
+        }
         if (options.Tracks.Any(t => t.Enabled && (!double.IsFinite(t.VolumePercent) || t.VolumePercent < 0 || t.VolumePercent > 150)))
             throw new ArgumentException("Audio volume must be between 0 and 150 percent.");
         if (options.Tracks.Any(t => t.Enabled && t.SourceIndex < 0 && t.AudioOrdinal < 0))

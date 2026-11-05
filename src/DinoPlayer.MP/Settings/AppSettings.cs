@@ -60,6 +60,7 @@ public sealed class ExportPreset
     public string VideoBitrate { get; set; } = "8";
     public string VideoRateControl { get; set; } = ExportNames.Bitrate;
     public string VideoQuality { get; set; } = "23";
+    public string VideoTargetSize { get; set; } = TargetSize.DefaultMegabytes;
 
     public string AudioCodecName { get; set; } = ExportNames.Aac;
     public string AudioBitrate { get; set; } = "192k";

@@ -21,6 +21,60 @@ internal static class ExportManagerTests
         await Program.Test("failed final publication removes temporary output and preserves conflicting files", PublishFailure);
         await Program.Test("runner exceptions continue the queue and progress callbacks cannot change a finished job", RunnerFailure);
         await Program.Test("source protection and destination reservations recognize symlinked folders", Aliases);
+        await Program.Test("target size exports encode again until they fit, and stop when that fails", TargetSizeRetries);
+    }
+
+    private static async Task TargetSizeRetries()
+    {
+        // A fake encoder that writes the next size from the list; null waits for cancellation.
+        var sizes = new Queue<long?>();
+        var commands = new List<ExportCommand>();
+        var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var fixture = new Fixture(async (_, command, _, progress, token) =>
+        {
+            commands.Add(command);
+            if (sizes.Dequeue() is not { } size)
+            {
+                waiting.TrySetResult();
+                try { await Task.Delay(Timeout.Infinite, token); } catch (OperationCanceledException) { }
+                return new(null, true);
+            }
+            await using (var file = new FileStream(command.Arguments[^1], FileMode.CreateNew)) file.SetLength(size);
+            progress(100);
+            return new(0, false);
+        });
+        var manager = fixture.Manager;
+        var options = fixture.Options with { VideoRateControl = "Size", VideoTargetSize = "10", Duration = 20 };
+
+        foreach (var size in new long?[] { 12_000_000, 9_000_000 }) sizes.Enqueue(size);
+        var fitted = Job(manager, manager.StartExport(options));
+        await manager.WhenIdleAsync();
+        fitted = Job(manager, fitted.Id);
+        var rates = commands.Select(command => command.SizeLimit!.VideoKbps).ToArray();
+        Program.Check(fitted.State == ExportJobState.Completed && rates.Length == 2 && rates[1] < rates[0] * .9 &&
+                      Program.Value(commands[1].Arguments, "-b:v") == $"{rates[1]}k" && commands[1].SizeLimit!.Attempt == 2,
+            $"An oversized clip was not encoded again at a lower bitrate:\n{fitted.Log}");
+        Program.Check(new FileInfo(fitted.Definition.Options.OutputPath).Length == 9_000_000 && !File.Exists(fitted.Definition.TemporaryPath) &&
+                      fitted.Log.Contains("Encoding again") && fitted.Log.Contains("Size: 9.00 MB"), $"Retry result or log is wrong:\n{fitted.Log}");
+
+        commands.Clear();
+        foreach (var size in new long?[] { 12_000_000, 11_900_000 }) sizes.Enqueue(size);
+        var stuck = Job(manager, manager.StartExport(options));
+        await manager.WhenIdleAsync();
+        stuck = Job(manager, stuck.Id);
+        Program.Check(stuck.State == ExportJobState.Failed && commands.Count == 2 && stuck.Error!.Contains("did not make it smaller") &&
+                      !File.Exists(stuck.Definition.Options.OutputPath) && !File.Exists(stuck.Definition.TemporaryPath),
+            $"A clip that would not shrink was published or retried forever:\n{stuck.Log}");
+
+        commands.Clear();
+        foreach (var size in new long?[] { 12_000_000, null }) sizes.Enqueue(size);
+        var cancelled = Job(manager, manager.StartExport(options));
+        await waiting.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await manager.CancelCurrentAsync();
+        cancelled = Job(manager, cancelled.Id);
+        Program.Check(cancelled.State == ExportJobState.Cancelled && commands.Count == 2 &&
+                      !File.Exists(cancelled.Definition.Options.OutputPath) && !File.Exists(cancelled.Definition.TemporaryPath),
+            "Cancelling a second attempt left files or the wrong state.");
     }
 
     private static async Task Sequential()

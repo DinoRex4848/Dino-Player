@@ -172,6 +172,67 @@ internal static class Program
                 Check(SettingsStore.FindExportPreset("quality")!.VideoQuality == "19", "Saving quality validated inactive bitrate.");
                 return Task.CompletedTask;
             });
+            await Test("target size bitrate follows clip length, audio and encoder caps", () =>
+            {
+                var options = Options(2) with { VideoRateControl = "Size", VideoTargetSize = "10", Duration = 20, AudioBitrate = "192k" };
+                var plan = TargetSize.Plan(options);
+                // 10 MB, minus container overhead and one 192 kbps mixed track, over 20 s plus a 2 s rate buffer.
+                var videoBits = (10_000_000 - 32_000 - 2_000 * 20) * 8 - 192_000 * 20 * 1.02;
+                var expected = (int)(videoBits / 22 / 1000);
+                Check(plan is { MaxBytes: 10_000_000, Seconds: 20, Attempt: 1 } && plan.VideoKbps == expected, $"Wrong plan: {plan}, expected {expected} kbps.");
+                var command = ExportCommandBuilder.Build(options);
+                Check(command.SizeLimit == plan && Value(command.Arguments, "-b:v") == $"{expected}k" &&
+                      Value(command.Arguments, "-maxrate") == $"{expected}k" && Value(command.Arguments, "-bufsize") == $"{expected * 2}k",
+                    "x264 size export lost its bitrate cap.");
+                Check(TargetSize.Plan(options with { KeepTracksSeparate = true }).VideoKbps < expected - 150, "Separate tracks did not reserve more audio.");
+                Check(TargetSize.Plan(options with { AudioBitrate = "128k" }).VideoKbps > expected, "A lower audio bitrate did not leave more for video.");
+                Check(TargetSize.Plan(options with { CopyPlaybackSpeed = true, PlaybackSpeed = 2 }).Seconds == 10 &&
+                      TargetSize.Plan(options with { CropEnabled = true, Start = 4, End = 9 }).Seconds == 5, "Size plan used the wrong clip length.");
+                foreach (var codec in new[] { "H.264", "H.265", "AV1" })
+                foreach (var gpu in new[] { false, true })
+                {
+                    var args = ExportCommandBuilder.Build(options with { VideoCodec = codec, UseGpu = gpu, VideoPreset = gpu ? "p4" : codec == "AV1" ? "8" : "medium" }).Arguments;
+                    var capped = gpu || codec != "AV1";
+                    Check((Value(args, "-maxrate") is not null) == capped && (Value(args, "-bufsize") is not null) == capped,
+                        $"{codec} {(gpu ? "NVENC" : "CPU")} has the wrong rate cap.");
+                    Check(Value(args, "-rc") == (gpu ? "vbr" : null) && Value(args, "-crf") is null && Value(args, "-cq") is null,
+                        $"{codec} {(gpu ? "NVENC" : "CPU")} size export used another rate mode.");
+                }
+                // SVT-AV1 has no cap, so its plan leaves out the buffer.
+                Check(TargetSize.Plan(options with { VideoCodec = "AV1" }).VideoKbps == (int)(videoBits / 20 / 1000), "CPU AV1 reserved a rate buffer.");
+                Check(TargetSize.Plan(options with { VideoTargetSize = "100000", Duration = 3 }).VideoKbps == TargetSize.MaximumVideoKbps, "Huge sizes were not capped.");
+                Check(ExportCommandBuilder.Build(Options() with { VideoTargetSize = "bad" }).SizeLimit is null &&
+                      ExportCommandBuilder.Build(Options() with { VideoRateControl = "Quality" }).SizeLimit is null, "Other modes received a size limit.");
+                foreach (var size in new[] { "0", "-1", "NaN", "Infinity", "1e999", "", "oops", "0.05" })
+                    Throws<ArgumentException>(() => ExportCommandBuilder.Build(options with { VideoTargetSize = size }));
+                foreach (var audio in new[] { options with { AudioCodec = "FLAC" }, options with { AudioCodec = "Copy" }, options with { AudioAdvanced = true, AudioAdvancedText = "-c:a aac" } })
+                    Throws<ArgumentException>(() => ExportCommandBuilder.Build(audio));
+                ExportCommandBuilder.Build(Options(0) with { VideoRateControl = "Size", AudioCodec = "FLAC" });
+                ExportCommandBuilder.Build(options with { VideoCodec = "Copy", VideoTargetSize = "bad" });
+                Check(TargetSize.Describe(options with { VideoTargetSize = "2" }).Contains("720p") &&
+                      !TargetSize.Describe(options with { VideoTargetSize = "2", Resolution = "1280x720" }).Contains("720p") &&
+                      !TargetSize.Describe(options).Contains("720p") && TargetSize.Describe(options).Contains("Mbps of video for this 00:20 clip"),
+                    $"Unexpected size hint: {TargetSize.Describe(options)}");
+                Throws<ArgumentException>(() => SettingsStore.AddOrUpdateExportPreset(new() { Name = "bad size", VideoRateControl = "Size", VideoTargetSize = "0" }));
+                SettingsStore.AddOrUpdateExportPreset(new() { Name = "Discord", VideoRateControl = "Size", VideoTargetSize = "9.5", VideoBitrate = "NaN" });
+                Check(SettingsStore.FindExportPreset("Discord") is { VideoRateControl: "Size", VideoTargetSize: "9.5" }, "Size preset did not save.");
+                return Task.CompletedTask;
+            });
+            await Test("target size retries lower the bitrate and stop when it stops helping", () =>
+            {
+                var limit = new SizeLimit(10_000_000, 4000, 20, OtherBytes: 1_000_000);
+                Check(TargetSize.Check(limit, 10_000_000, null) is { Fits: true, Retry: null } fits && fits.Message.Contains("10.00 MB"), "A file at the limit did not fit.");
+                Check(TargetSize.Check(limit, 9_999_999, null).Message.Contains("9.99 MB") &&
+                      TargetSize.Check(limit, 10_000_001, null).Message.Contains("10.01 MB, over the 10 MB limit"), "Sizes near the limit were rounded towards it.");
+                // 10 MB of video should have been 8.7 MB: 3% under the limit, less 1 MB of audio.
+                var over = TargetSize.Check(limit, 11_000_000, null);
+                Check(over is { Fits: false, Retry: { Attempt: 2, VideoKbps: 3480, OtherBytes: 1_000_000 } } && over.Message.Contains("3.5 Mbps"), $"Wrong retry: {over}");
+                Check(TargetSize.Check(limit, 10_100_000, null).Retry?.VideoKbps == 3600, "A small overshoot did not lower the bitrate by 10%.");
+                Check(TargetSize.Check(limit with { Attempt = 2 }, 10_900_000, 11_000_000) is { Retry: null } stuck && stuck.Message.Contains("did not make it smaller"), "A stuck encoder kept retrying.");
+                Check(TargetSize.Check(limit with { Attempt = 3 }, 10_500_000, 12_000_000) is { Retry: null } last && last.Message.Contains("after 3 attempts"), "Retries did not stop.");
+                Check(TargetSize.Check(new SizeLimit(1_000_000, 110, 20, 100_000), 2_000_000, null) is { Fits: false, Retry: null }, "A retry went below the minimum bitrate.");
+                return Task.CompletedTask;
+            });
             await Test("settings normalization and detached snapshots", () =>
             {
                 var path = Path.Combine(Temp, "malformed.json");
@@ -322,6 +383,48 @@ internal static class Program
                     Check(first * 120 <= duration - 50 && last * 120 >= duration + 950 - 120, "Visible timeline markers missing.");
                 }
                 Check(TimelineViewport.VisibleMinutes(0, 0, 1000, 0).Last == -1, "Empty timeline created markers.");
+                return Task.CompletedTask;
+            });
+            await Test("playhead estimates advance only while playing and stay within bounds", () =>
+            {
+                var second = Stopwatch.Frequency;
+                var sample = PlaybackSnapshot.Empty with
+                {
+                    PositionSeconds = 10, DurationSeconds = 30, PlaybackSpeed = 2, IsPaused = false, SampleTimestamp = 1000
+                };
+                Check(Math.Abs(sample.EstimatePosition(1000 + second / 4) - 10.5) < 1e-6, "Playing estimate ignored elapsed time or speed.");
+                Check(sample.EstimatePosition(1000 + second * 5) == 12, "A stalled sample was extrapolated beyond one second.");
+                Check(sample.EstimatePosition(0) == 10, "An estimate moved backwards before its sample.");
+                Check((sample with { IsPaused = true }).EstimatePosition(1000 + second) == 10, "A paused estimate moved.");
+                Check((sample with { IsSeeking = true }).EstimatePosition(1000 + second) == 10, "An estimate moved during a seek.");
+                Check((sample with { SampleTimestamp = 0 }).EstimatePosition(1000 + second) == 10, "An unsampled estimate moved.");
+                Check((sample with { PositionSeconds = 29.8 }).EstimatePosition(1000 + second) == 30, "An estimate passed the end.");
+                return Task.CompletedTask;
+            });
+            await Test("command-line videos accept paths and file URIs, skipping options", () =>
+            {
+                Check(StartupArguments.FindMediaPath(null) is null && StartupArguments.FindMediaPath(["--verbose", " "]) is null,
+                    "Options or blanks were treated as a video.");
+                var relative = Path.Combine("clips", "my clip.mkv");
+                Check(StartupArguments.FindMediaPath(["-x", relative, "other.mkv"]) == Path.GetFullPath(relative),
+                    "A relative path was not resolved from the working directory.");
+                var absolute = Path.Combine(Temp, "Gear 100% #1.mkv");
+                Check(StartupArguments.FindMediaPath([absolute]) == absolute, "A literal path with URI characters changed.");
+                Check(StartupArguments.FindMediaPath([new Uri(absolute).AbsoluteUri]) == absolute, "A file URI was not decoded.");
+                return Task.CompletedTask;
+            });
+            await Test("new player keys are unavailable to unmodified speed shortcuts only", () =>
+            {
+                foreach (var key in new[] { "Comma", "Period", "I", "O", "M", "ArrowUp", "ArrowDown" })
+                {
+                    Check(PlaybackShortcut.IsPlayerKey(key, "None"), $"{key} could become a speed shortcut.");
+                    Check(!PlaybackShortcut.IsPlayerKey(key, "Ctrl"), $"Ctrl+{key} was blocked.");
+                    Check(!PlaybackShortcut.IsReserved(key), $"{key} would reset saved shortcuts on load.");
+                }
+                Check(PlaybackShortcut.IsPlayerKey("ArrowLeft", "Ctrl") && PlaybackShortcut.IsPlayerKey("Space", "Shift"),
+                    "Fixed keys became available with modifiers.");
+                Check(!PlaybackShortcut.IsPlayerKey("Equal", "None") && !PlaybackShortcut.IsPlayerKey("BracketLeft", "None"),
+                    "Speed defaults or free keys were blocked.");
                 return Task.CompletedTask;
             });
             await Test("worker shutdown rejects queued work and destroys once", WorkerShutdown);

@@ -30,7 +30,7 @@ public static class SettingsStore
         if (string.IsNullOrWhiteSpace(preset.Name)) throw new ArgumentException("A preset needs a name.");
         if (!preset.VideoAdvanced && preset.VideoCodecName != ExportNames.Copy)
             VideoRateControl.Validate(preset.VideoRateControl, preset.VideoBitrate, preset.VideoQuality,
-                preset.VideoCodecName, preset.UseGpu);
+                preset.VideoTargetSize, preset.VideoCodecName, preset.UseGpu);
         Repository.Update(settings =>
         {
             var index = settings.ExportPresets.FindIndex(p => string.Equals(p.Name, preset.Name.Trim(), StringComparison.OrdinalIgnoreCase));
@@ -182,7 +182,9 @@ internal sealed class SettingsRepository
             preset.VideoPreset ??= "medium";
             if (!double.TryParse(preset.VideoBitrate, NumberStyles.Float, CultureInfo.InvariantCulture, out var bitrate) ||
                 !double.IsFinite(bitrate) || bitrate <= 0) preset.VideoBitrate = "8";
-            preset.VideoRateControl = preset.VideoRateControl == ExportNames.Quality ? ExportNames.Quality : ExportNames.Bitrate;
+            preset.VideoRateControl = preset.VideoRateControl is ExportNames.Quality or ExportNames.Size
+                ? preset.VideoRateControl : ExportNames.Bitrate;
+            if (!TargetSize.TryParseMegabytes(preset.VideoTargetSize, out _)) preset.VideoTargetSize = TargetSize.DefaultMegabytes;
             if (!VideoRateControl.IsValidQuality(preset.VideoQuality, preset.VideoCodecName, preset.UseGpu))
                 preset.VideoQuality = "23";
             preset.AudioBitrate ??= "192k";

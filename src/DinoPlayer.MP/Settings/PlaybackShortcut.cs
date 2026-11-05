@@ -12,6 +12,21 @@ public static class PlaybackShortcut
     public static bool IsReserved(string keyName) =>
         !Enum.TryParse<PhysicalKey>(keyName, ignoreCase: true, out var key) || IsReserved(key);
 
+    // Unmodified player keys added after speed shortcuts became configurable.
+    // A saved shortcut using one keeps working, because speed shortcuts are
+    // matched first, but Preferences no longer offers them.
+    private static readonly PhysicalKey[] UnmodifiedPlayerKeys =
+    {
+        PhysicalKey.Comma, PhysicalKey.Period, PhysicalKey.I, PhysicalKey.O, PhysicalKey.M,
+        PhysicalKey.ArrowUp, PhysicalKey.ArrowDown
+    };
+
+    /// <summary>Whether the player already uses this shortcut, so a speed shortcut cannot be set to it.</summary>
+    public static bool IsPlayerKey(string keyName, string modifierText) =>
+        IsReserved(keyName) ||
+        (TryParse(keyName, modifierText, out var key, out var modifiers) && modifiers == KeyModifiers.None &&
+         UnmodifiedPlayerKeys.Contains(key));
+
     public static string Format(string keyName, string modifiers)
     {
         var modifierText = string.Equals(modifiers, "None", StringComparison.OrdinalIgnoreCase)

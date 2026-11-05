@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -5,6 +6,7 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
+using DinoPlayer.MP.Playback;
 
 namespace DinoPlayer.MP;
 
@@ -53,22 +55,13 @@ public sealed partial class MainWindow
                 FullscreenPlayPauseButton.IsEnabled = true;
             }
 
-            _currentPos = Math.Clamp(snapshot.PositionSeconds, 0, Math.Max(0, _durationSeconds));
-            PositionText.Text = TimeFormat.Clock(snapshot.PositionSeconds);
             SpeedText.Text = $"{snapshot.PlaybackSpeed:0.##}×";
             SetPlayPauseIcon(PlayPauseButton, PlayPauseIcon, snapshot.IsPaused);
-            FullscreenPositionText.Text = TimeFormat.Clock(snapshot.PositionSeconds);
             FullscreenDurationText.Text = TimeFormat.Clock(snapshot.DurationSeconds);
             FullscreenSpeedText.Text = $"{snapshot.PlaybackSpeed:0.##}×";
             SetPlayPauseIcon(FullscreenPlayPauseButton, FullscreenPlayPauseIcon, snapshot.IsPaused);
-            if (!_isFullscreenTimelinePointerDown)
-            {
-                _isApplyingFullscreenSliderValue = true;
-                FullscreenTimelineSlider.Value = Math.Clamp(snapshot.PositionSeconds, 0, Math.Max(0, _durationSeconds));
-                _isApplyingFullscreenSliderValue = false;
-            }
-            if (_playhead is not null) Canvas.SetLeft(_playhead, TimeToX(_currentPos));
-            UpdatePlayheadIndicators();
+            ShowPosition(snapshot, Stopwatch.GetTimestamp());
+            RequestPlayheadFrame(snapshot);
 
             if (snapshot.DurationSeconds > 0 && DateTimeOffset.Now - _lastStatsLog >= TimeSpan.FromSeconds(10))
             {
@@ -89,15 +82,98 @@ public sealed partial class MainWindow
         }
     }
 
+    // Moves the clock, playhead and fullscreen slider to the position shown now:
+    // a drag in progress, a seek the player has not caught up with yet, or the
+    // last sample advanced by the time since it was taken.
+    private void ShowPosition(PlaybackSnapshot snapshot, long now, bool animationFrame = false)
+    {
+        var position = DisplayedPosition(snapshot, now);
+        _currentPos = Math.Clamp(position, 0, Math.Max(0, _durationSeconds));
+        var clock = TimeFormat.Clock(position);
+        if (PositionText.Text != clock) PositionText.Text = FullscreenPositionText.Text = clock;
+        // Frames only move the slider while it can be seen, by at least half a pixel.
+        var slider = FullscreenTimelineSlider;
+        if (!_isFullscreenTimelinePointerDown && (!animationFrame || (_isFullscreen &&
+            Math.Abs(_currentPos - slider.Value) * slider.Bounds.Width >= 0.5 * Math.Max(1, slider.Maximum))))
+        {
+            _isApplyingFullscreenSliderValue = true;
+            slider.Value = _currentPos;
+            _isApplyingFullscreenSliderValue = false;
+        }
+        if (_playhead is not null && _playheadShift is not null)
+        {
+            var x = TimeToX(_currentPos);
+            var left = Canvas.GetLeft(_playhead);
+            if (animationFrame && !double.IsNaN(left))
+            {
+                // Between regular updates the playhead slides with a render
+                // transform: moving Canvas.Left every frame costs a layout pass.
+                if (Math.Abs(x - left - _playheadShift.X) >= 0.25) _playheadShift.X = x - left;
+            }
+            else
+            {
+                if (double.IsNaN(left) || Math.Abs(left - x) >= 0.25) Canvas.SetLeft(_playhead, x);
+                _playheadShift.X = 0;
+            }
+        }
+        UpdatePlayheadIndicators();
+    }
+
+    private double DisplayedPosition(PlaybackSnapshot snapshot, long now)
+    {
+        if (_scrubPosition is { } scrub) return scrub;
+        if (_seekDisplayHold is { } hold)
+        {
+            // Wait for a sample taken after the seek that landed near its target.
+            var caughtUp = snapshot.SampleTimestamp > hold.Since && !snapshot.IsSeeking &&
+                           Math.Abs(snapshot.PositionSeconds - hold.Target) < SeekDisplayTolerance;
+            if (!caughtUp && Stopwatch.GetElapsedTime(hold.Since, now) < SeekDisplayTimeout) return hold.Target;
+            _seekDisplayHold = null;
+        }
+        return snapshot.EstimatePosition(now);
+    }
+
+    // While playing, redraw the playhead on every display frame instead of only
+    // when the 200 ms timer or a native event refreshes the UI.
+    private void RequestPlayheadFrame(PlaybackSnapshot snapshot)
+    {
+        if (!ShouldAnimatePlayhead(snapshot)) return;
+        // A request that never ran (for example while minimized) is replaced.
+        if (_playheadFrameRequestedAt != 0 &&
+            Stopwatch.GetElapsedTime(_playheadFrameRequestedAt) < PlayheadFrameWatchdog) return;
+        var token = ++_playheadFrameToken;
+        _playheadFrameRequestedAt = Stopwatch.GetTimestamp();
+        RequestAnimationFrame(_ => OnPlayheadFrame(token));
+    }
+
+    private void OnPlayheadFrame(int token)
+    {
+        if (token != _playheadFrameToken) return;
+        _playheadFrameRequestedAt = 0;
+        if (_player is not { } player) return;
+        var snapshot = player.GetSnapshot();
+        if (snapshot.Generation != player.Generation || !ShouldAnimatePlayhead(snapshot)) return;
+        ShowPosition(snapshot, Stopwatch.GetTimestamp(), animationFrame: true);
+        RequestPlayheadFrame(snapshot);
+    }
+
+    private bool ShouldAnimatePlayhead(PlaybackSnapshot snapshot) =>
+        !_closing && !_closed && !_exportTabSelected && WindowState != WindowState.Minimized &&
+        snapshot.IsLoaded && !snapshot.IsPaused && !snapshot.IsSeeking && _durationSeconds > 0 &&
+        _scrubPosition is null;
+
     private void ResetTimeline()
     {
         _durationSeconds = 0;
         _currentPos = 0;
         _timelineSized = false;
+        EndScrub();
+        _seekDisplayHold = null;
         TimelineCanvas.Width = 0;
         TimelineCanvas.Children.Clear();
         _timelineMarkers.Clear();
         _playhead = null;
+        _playheadShift = null;
         _cropHighlight = null;
         _cropStartThumb = null;
         _cropEndThumb = null;
@@ -141,6 +217,8 @@ public sealed partial class MainWindow
         DrawMinuteMarkers();
         if (_playhead is not null)
             Canvas.SetLeft(_playhead, TimeToX(_currentPos));
+        if (_playheadShift is not null)
+            _playheadShift.X = 0;
         UpdateCropVisuals();
     }
 
@@ -149,13 +227,15 @@ public sealed partial class MainWindow
         if (_playhead is not null)
             return;
 
+        _playheadShift = new TranslateTransform();
         _playhead = new Rectangle
         {
             Width = 2,
             Height = TimelineCanvas.Height,
             Fill = UiTheme.Resource<IBrush>("TextPrimary"),
             IsHitTestVisible = false,
-            ZIndex = 10
+            ZIndex = 10,
+            RenderTransform = _playheadShift
         };
         TimelineCanvas.Children.Add(_playhead);
         Canvas.SetLeft(_playhead, TimeToX(_currentPos));
@@ -201,11 +281,89 @@ public sealed partial class MainWindow
         }
     }
 
+    // An exact seek from the UI: show its target at once and keep showing it
+    // until the player reports a position there.
+    private void SeekToPosition(double seconds)
+    {
+        if (_player is not { } player || _durationSeconds <= 0) return;
+        var target = Math.Clamp(seconds, 0, _durationSeconds);
+        var now = Stopwatch.GetTimestamp();
+        _seekDisplayHold = (target, now);
+        ShowPosition(player.GetSnapshot(), now);
+        RunPlayerAction(engine => engine.SeekAsync(target));
+    }
+
+    // Dragging previews with fast keyframe seeks, at most one per
+    // ScrubSeekInterval, then CompleteScrub lands exactly where the drag ended.
+    private void UpdateScrub(double seconds)
+    {
+        if (_player is not { } player || _durationSeconds <= 0) return;
+        var target = Math.Clamp(seconds, 0, _durationSeconds);
+        _seekDisplayHold = null;
+        _scrubPosition = target;
+        _scrubSeekPending = target;
+        ShowPosition(player.GetSnapshot(), Stopwatch.GetTimestamp());
+        if (!_scrubSeekTimer.IsEnabled) SendScrubSeek();
+    }
+
+    private void SendScrubSeek()
+    {
+        _scrubSeekTimer.Stop();
+        if (_scrubSeekPending is not { } target || target == _scrubSeekSent) return;
+        _scrubSeekSent = target;
+        RunPlayerAction(player => player.SeekPreviewAsync(target));
+        _scrubSeekTimer.Start();
+    }
+
+    private void ScrubSeekTimerOnTick(object? sender, EventArgs eventArgs) => SendScrubSeek();
+
+    private void CompleteScrub()
+    {
+        if (_scrubPosition is not { } target) return;
+        EndScrub();
+        SeekToPosition(target);
+    }
+
+    private void EndScrub()
+    {
+        _scrubSeekTimer.Stop();
+        _scrubPosition = _scrubSeekPending = _scrubSeekSent = null;
+    }
+
+    // A click seeks exactly at once; moving a few pixels turns it into a scrub.
     private void TimelineCanvas_PointerPressed(object? sender, PointerPressedEventArgs eventArgs)
     {
-        if (_player is null || !eventArgs.GetCurrentPoint(TimelineCanvas).Properties.IsLeftButtonPressed)
+        if (_player is null || _durationSeconds <= 0 || !eventArgs.GetCurrentPoint(TimelineCanvas).Properties.IsLeftButtonPressed)
             return;
-        RunPlayerAction(player => player.SeekAsync(XToTime(eventArgs.GetPosition(TimelineCanvas).X)));
+        var x = eventArgs.GetPosition(TimelineCanvas).X;
+        _timelinePressX = x;
+        _isTimelinePointerDown = true;
+        eventArgs.Pointer.Capture(TimelineCanvas);
+        SeekToPosition(XToTime(x));
+        eventArgs.Handled = true;
+    }
+
+    private void TimelineCanvas_PointerMoved(object? sender, PointerEventArgs eventArgs)
+    {
+        if (!_isTimelinePointerDown) return;
+        var x = eventArgs.GetPosition(TimelineCanvas).X;
+        if (_scrubPosition is null && Math.Abs(x - _timelinePressX) < TimelineDragThreshold) return;
+        UpdateScrub(XToTime(x));
+    }
+
+    private void TimelineCanvas_PointerReleased(object? sender, PointerReleasedEventArgs eventArgs)
+    {
+        if (!_isTimelinePointerDown) return;
+        _isTimelinePointerDown = false;
+        eventArgs.Pointer.Capture(null);
+        CompleteScrub();
+    }
+
+    private void TimelineCanvas_PointerCaptureLost(object? sender, PointerCaptureLostEventArgs eventArgs)
+    {
+        if (!_isTimelinePointerDown) return;
+        _isTimelinePointerDown = false;
+        CompleteScrub();
     }
 
     private void TimelineScroller_ScrollChanged(object? sender, ScrollChangedEventArgs eventArgs)

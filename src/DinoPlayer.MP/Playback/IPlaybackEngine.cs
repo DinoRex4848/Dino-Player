@@ -4,7 +4,7 @@ public interface IPlaybackEngine : IDisposable
 {
     event Action<long>? MediaLoaded;
     event Action<long>? MediaEnded;
-    /// <summary>A seek or playback restart refreshed the cached position; raised on the native worker.</summary>
+    /// <summary>A seek, playback restart, pause or speed change refreshed the cached snapshot; raised on the native worker.</summary>
     event Action<long>? PositionChanged;
     event Action<PlaybackError>? Error;
     event Action<PlaybackPointerEvent>? PointerInput;
@@ -27,6 +27,14 @@ public interface IPlaybackEngine : IDisposable
     Task SeekAndWaitAsync(double seconds);
     /// <summary>Navigate by a signed offset using fast keyframe seeking.</summary>
     Task SeekRelativeAsync(double deltaSeconds);
+    /// <summary>Navigate by a signed offset to an exact position.</summary>
+    Task SeekRelativeExactAsync(double deltaSeconds);
+    /// <summary>Fast keyframe seek to an absolute position, for previews while dragging.</summary>
+    Task SeekPreviewAsync(double seconds);
+    /// <summary>Show the next (positive) or previous (negative) frame and pause.</summary>
+    Task FrameStepAsync(int direction);
+    /// <summary>Read the current position from mpv instead of the cached snapshot.</summary>
+    Task<double> GetPositionAsync();
     Task SetMasterVolumeAsync(double volumePercent);
     Task SetCursorAutohideAsync(bool enabled);
     Task SetLoopingAsync(bool enabled);

@@ -48,6 +48,8 @@ public sealed partial class MainWindow
         _cropEndThumb = MakeCropHandle();
         _cropStartThumb.DragDelta += CropStartThumbOnDragDelta;
         _cropEndThumb.DragDelta += CropEndThumbOnDragDelta;
+        _cropStartThumb.DragCompleted += CropThumbOnDragCompleted;
+        _cropEndThumb.DragCompleted += CropThumbOnDragCompleted;
         TimelineCanvas.Children.Add(_cropStartThumb);
         TimelineCanvas.Children.Add(_cropEndThumb);
     }
@@ -105,26 +107,79 @@ public sealed partial class MainWindow
         if (_cropEndThumb is not null) _cropEndThumb.IsVisible = visible;
     }
 
-    private void CropStartThumbOnDragDelta(object? sender, VectorEventArgs eventArgs) =>
-        SetCropValues(XToTime(TimeToX(_cropStart) + eventArgs.Vector.X), _cropEnd);
-
-    private void CropEndThumbOnDragDelta(object? sender, VectorEventArgs eventArgs) =>
-        SetCropValues(_cropStart, XToTime(TimeToX(_cropEnd) + eventArgs.Vector.X));
-
-    private void SetCropStartToCurrent()
+    // Dragging a handle shows the frame at that boundary.
+    private void CropStartThumbOnDragDelta(object? sender, VectorEventArgs eventArgs)
     {
-        if (_currentPos <= _cropEnd)
-            SetCropValues(_currentPos, _cropEnd);
-        else
-            SetCropValues(Math.Min(_currentPos, _durationSeconds), Math.Min(_currentPos + DefaultCropSeconds, _durationSeconds));
+        SetCropValues(XToTime(TimeToX(_cropStart) + eventArgs.Vector.X), _cropEnd);
+        UpdateScrub(_cropStart);
     }
 
-    private void SetCropEndToCurrent()
+    private void CropEndThumbOnDragDelta(object? sender, VectorEventArgs eventArgs)
     {
-        if (_currentPos >= _cropStart)
-            SetCropValues(_cropStart, _currentPos);
+        SetCropValues(_cropStart, XToTime(TimeToX(_cropEnd) + eventArgs.Vector.X));
+        UpdateScrub(_cropEnd);
+    }
+
+    private void CropThumbOnDragCompleted(object? sender, VectorEventArgs eventArgs) => CompleteScrub();
+
+    private async void SetCropStartToCurrent()
+    {
+        if (await ReadCurrentPositionAsync() is { } position) SetCropStart(position);
+    }
+
+    private async void SetCropEndToCurrent()
+    {
+        if (await ReadCurrentPositionAsync() is { } position) SetCropEnd(position);
+    }
+
+    private void SetCropStart(double position)
+    {
+        if (position <= _cropEnd)
+            SetCropValues(position, _cropEnd);
         else
-            SetCropValues(Math.Max(0, _currentPos - DefaultCropSeconds), _currentPos);
+            SetCropValues(Math.Min(position, _durationSeconds), Math.Min(position + DefaultCropSeconds, _durationSeconds));
+    }
+
+    private void SetCropEnd(double position)
+    {
+        if (position >= _cropStart)
+            SetCropValues(_cropStart, position);
+        else
+            SetCropValues(Math.Max(0, position - DefaultCropSeconds), position);
+    }
+
+    // I and O: mark the start or end, turning Crop on first. With no earlier
+    // selection, the first mark selects ten seconds after a start or before an end.
+    private async void MarkCropFromShortcut(bool start)
+    {
+        if (_durationSeconds <= 0 || !CropToggle.IsEnabled) return;
+        if (await ReadCurrentPositionAsync() is not { } position || _durationSeconds <= 0) return;
+        var hadSelection = _cropEnd > _cropStart;
+        CropToggle.IsChecked = true;
+        if (!hadSelection)
+            SetCropValues(start ? position : Math.Max(0, position - DefaultCropSeconds),
+                start ? Math.Min(position + DefaultCropSeconds, _durationSeconds) : position);
+        else if (start) SetCropStart(position);
+        else SetCropEnd(position);
+    }
+
+    // The cached position can be a few hundred milliseconds old while playing,
+    // so crop points ask the player. A drag in progress wins.
+    private async Task<double?> ReadCurrentPositionAsync()
+    {
+        if (_scrubPosition is { } scrub) return scrub;
+        if (_player is not { } player || _durationSeconds <= 0) return null;
+        var generation = player.Generation;
+        double position;
+        try { position = await player.GetPositionAsync(); }
+        catch (Exception exception)
+        {
+            AppLog.Warn($"Could not read the playback position: {exception.Message}");
+            position = _currentPos;
+        }
+        return IsCurrentMedia(player, generation) && _durationSeconds > 0
+            ? Math.Clamp(position, 0, _durationSeconds)
+            : null;
     }
 
     private void SetCropValues(double start, double end)

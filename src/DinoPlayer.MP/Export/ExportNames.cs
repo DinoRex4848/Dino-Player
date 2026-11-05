@@ -31,4 +31,5 @@ internal static class ExportNames
 
     public const string Bitrate = "Bitrate";
     public const string Quality = "Quality";
+    public const string Size = "Size";
 }

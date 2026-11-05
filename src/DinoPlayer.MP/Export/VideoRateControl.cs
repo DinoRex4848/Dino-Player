@@ -14,7 +14,7 @@ internal static class VideoRateControl
                quality >= minimum && quality <= maximum;
     }
 
-    public static void Validate(string mode, string bitrate, string quality, string codec, bool gpu)
+    public static void Validate(string mode, string bitrate, string quality, string targetSize, string codec, bool gpu)
     {
         if (mode == ExportNames.Bitrate)
         {
@@ -31,6 +31,11 @@ internal static class VideoRateControl
                                             (gpu ? " NVENC quality 0 means automatic." : ""));
             }
         }
-        else throw new ArgumentException("Choose Bitrate or Target quality for video rate control.");
+        else if (mode == ExportNames.Size)
+        {
+            if (!TargetSize.TryParseMegabytes(targetSize, out _))
+                throw new ArgumentException("Enter a target size in MB greater than 0.");
+        }
+        else throw new ArgumentException("Choose Bitrate, Target quality or Target size for video rate control.");
     }
 }

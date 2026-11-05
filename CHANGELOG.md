@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Frame stepping with **,** and **.**, exact one-second steps with **Shift+Left/Right**, **I** / **O** to set the crop start and end (turning Crop on), **Up/Down** for master volume and **M** to mute.
+- Drag along the timeline, the fullscreen timeline or a crop handle to scrub. Dragging previews with fast keyframe jumps and lands exactly on release; crop handles show the frame at the boundary.
+- Videos opened with Dino Player from a file manager, or passed on the command line, load at startup. The Linux launcher offers Dino Player under Open With for common video types.
+- **Show in folder** in the export queue opens the folder of the selected or latest finished clip, highlighting the file where the file manager supports it.
+- **Target size** rate control keeps an export under a size in MB, such as a chat app's upload limit. It works out the video bitrate from the clip length and audio, shows it on the Export tab, and caps the encoder's rate where it supports it. A file that still comes out too big is encoded again at a lower bitrate, up to three attempts. Target sizes are saved with export presets.
+
+### Fixed
+
+- Set Start, Set End, I and O use the exact position on screen. During playback they could previously be a few hundred milliseconds early.
+
+### Performance
+
+- The play/pause button and speed update as soon as mpv reports the change, instead of on the next 200 ms refresh.
+- While playing, the playhead moves smoothly on every display frame, estimated between mpv's position samples. Clicked seek targets show at once.
+
 ## 1.5.3 — 2026-10-26
 
 ### Fixed

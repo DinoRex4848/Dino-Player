@@ -20,6 +20,9 @@ public sealed partial class ExportView : UserControl, IDisposable
     private static readonly string[] VideoCodecs = { ExportNames.H264, ExportNames.H265, ExportNames.Av1, ExportNames.Copy };
     private static readonly string[] AudioCodecs = { ExportNames.Aac, ExportNames.Opus, ExportNames.Flac, ExportNames.Copy };
     private static readonly string[] LossyAudioBitrates = { "128k", "192k", "256k", "320k" };
+    // Saved rate-control values with their Export tab labels, in list order.
+    private static readonly (string Value, string Label)[] RateModes =
+        [(ExportNames.Bitrate, "Bitrate"), (ExportNames.Quality, "Target quality"), (ExportNames.Size, "Target size")];
     private ExportContext _context = new();
     private readonly ObservableCollection<string> _presetNames = new();
     private readonly ObservableCollection<QueueItem> _queueItems = new();
@@ -31,13 +34,16 @@ public sealed partial class ExportView : UserControl, IDisposable
     private bool _refreshing;
     private string? _selectedLog;
     private Guid? _selectedLogJob;
+    // Output of the finished clip Show in folder opens: the selected one, or the latest.
+    private string? _showInFolderPath;
     private string _lastSourcePath = "";
     // The export folder the view filled in itself. It follows the next source
     // video; a folder the user picked is kept.
     private string? _automaticOutputFolder;
     private string _videoBitrate = "8";
     private string _videoQuality = "23";
-    private bool _showingQuality;
+    private string _videoTargetSize = TargetSize.DefaultMegabytes;
+    private string _rateMode = ExportNames.Bitrate;
     private bool _updatingRateControl;
 
     private string SelectedResolution => Resolutions.FirstOrDefault(
@@ -67,7 +73,7 @@ public sealed partial class ExportView : UserControl, IDisposable
         AudioCodecCombo.SelectedIndex = 0;
         VideoPresetCombo.ItemsSource = GetCpuPresets(ExportNames.H264);
         VideoPresetCombo.SelectedItem = "medium";
-        VideoRateControlCombo.ItemsSource = new[] { "Bitrate", "Target quality" };
+        VideoRateControlCombo.ItemsSource = RateModes.Select(mode => mode.Label).ToArray();
         VideoRateControlCombo.SelectedIndex = 0;
         AudioBitrateCombo.ItemsSource = LossyAudioBitrates;
         AudioBitrateCombo.SelectedItem = "192k";
@@ -81,7 +87,8 @@ public sealed partial class ExportView : UserControl, IDisposable
         VideoBitrateBox.PropertyChanged += (_, e) =>
         {
             if (e.Property != TextBox.TextProperty || _updatingRateControl) return;
-            if (_showingQuality) _videoQuality = VideoBitrateBox.Text ?? "";
+            if (_rateMode == ExportNames.Quality) _videoQuality = VideoBitrateBox.Text ?? "";
+            else if (_rateMode == ExportNames.Size) _videoTargetSize = VideoBitrateBox.Text ?? "";
             else _videoBitrate = VideoBitrateBox.Text ?? "";
             MarkPresetDirty();
         };
@@ -108,7 +115,7 @@ public sealed partial class ExportView : UserControl, IDisposable
         VideoAdvancedBox.PropertyChanged += (_, e) => { if (e.Property == TextBox.TextProperty) { MarkPresetDirty(); RefreshSpeedExportAvailability(); } };
         AudioAdvancedBox.PropertyChanged += (_, e) => { if (e.Property == TextBox.TextProperty) { MarkPresetDirty(); RefreshSpeedExportAvailability(); } };
         BrowseOutputButton.Click += BrowseOutputOnClick;
-        CopyPlaybackSpeedCheck.IsCheckedChanged += (_, _) => RefreshSpeedExportAvailability();
+        CopyPlaybackSpeedCheck.IsCheckedChanged += (_, _) => { RefreshSpeedExportAvailability(); RefreshTargetSizeHint(); };
         RefreshSpeedExportAvailability();
         RefreshRateControl();
 
@@ -165,6 +172,7 @@ public sealed partial class ExportView : UserControl, IDisposable
         }
         if (!string.IsNullOrWhiteSpace(context.SourcePath)) _lastSourcePath = context.SourcePath;
         RefreshSpeedExportAvailability();
+        RefreshTargetSizeHint();
         RefreshQueue();
     }
 
@@ -254,19 +262,34 @@ public sealed partial class ExportView : UserControl, IDisposable
         _updatingRateControl = true;
         try
         {
-            _showingQuality = VideoRateControlCombo.SelectedIndex == 1;
-            VideoBitrateBox.Text = _showingQuality ? _videoQuality : _videoBitrate;
+            _rateMode = RateModes[Math.Clamp(VideoRateControlCombo.SelectedIndex, 0, RateModes.Length - 1)].Value;
             var gpu = VideoGpuCheck.IsChecked == true;
-            VideoRateLabel.Text = _showingQuality ? $"Quality ({(gpu ? "CQ" : "CRF")})" : "Bitrate (Mbps)";
             var (minimum, maximum) = VideoRateControl.QualityRange(VideoCodecCombo.SelectedItem as string ?? ExportNames.H264, gpu);
-            var tip = _showingQuality
-                ? $"Enter a whole number from {minimum} to {maximum}. Lower values increase quality; output file size varies." +
-                  (gpu ? " NVENC quality 0 means automatic and is not a target quality." : "")
-                : "Target video bitrate in megabits per second. Target quality lets the bitrate vary to preserve quality.";
+            (VideoBitrateBox.Text, VideoRateLabel.Text, var tip) = _rateMode switch
+            {
+                ExportNames.Quality => (_videoQuality, $"Quality ({(gpu ? "CQ" : "CRF")})",
+                    $"Enter a whole number from {minimum} to {maximum}. Lower values increase quality; output file size varies." +
+                    (gpu ? " NVENC quality 0 means automatic and is not a target quality." : "")),
+                ExportNames.Size => (_videoTargetSize, "Size (MB)",
+                    "The exported file stays under this size (1 MB is 1,000,000 bytes), for example your chat app's upload limit. " +
+                    "The video bitrate is worked out from the clip length and audio. If the file comes out too big, it is encoded again."),
+                _ => (_videoBitrate, "Bitrate (Mbps)",
+                    "Target video bitrate in megabits per second. Target quality lets the bitrate vary to preserve quality; " +
+                    "Target size keeps the file under a size.")
+            };
             ToolTip.SetTip(VideoBitrateBox, tip);
             ToolTip.SetTip(VideoRateControlCombo, tip);
         }
         finally { _updatingRateControl = false; }
+        RefreshTargetSizeHint();
+    }
+
+    // Shows the bitrate a Target size export will use, or why it can't be used.
+    private void RefreshTargetSizeHint()
+    {
+        var options = CaptureOptions();
+        TargetSizeHint.IsVisible = _rateMode == ExportNames.Size && options.VideoCodec != ExportNames.Copy;
+        if (TargetSizeHint.IsVisible) TargetSizeHint.Text = TargetSize.Describe(options);
     }
 
     private void RefreshAudioBitrates()
@@ -317,6 +340,8 @@ public sealed partial class ExportView : UserControl, IDisposable
 
     private void MarkPresetDirty()
     {
+        // Every setting change passes through here, so the size hint follows them all.
+        RefreshTargetSizeHint();
         if (_loadingPreset || _suppressPresetSelection || PresetCombo.SelectedIndex <= 0)
             return;
 
@@ -334,8 +359,9 @@ public sealed partial class ExportView : UserControl, IDisposable
         UseGpu = VideoGpuCheck.IsChecked == true,
         VideoPreset = VideoPresetCombo.SelectedItem as string ?? "medium",
         VideoBitrate = _videoBitrate,
-        VideoRateControl = _showingQuality ? ExportNames.Quality : ExportNames.Bitrate,
+        VideoRateControl = _rateMode,
         VideoQuality = _videoQuality,
+        VideoTargetSize = _videoTargetSize,
         AudioCodecName = AudioCodecCombo.SelectedItem as string ?? ExportNames.Aac,
         AudioBitrate = AudioBitrateCombo.SelectedItem as string ?? "192k",
         KeepTracksSeparate = KeepTracksSeparateCheck.IsChecked == true,
@@ -367,7 +393,8 @@ public sealed partial class ExportView : UserControl, IDisposable
             }
             _videoBitrate = string.IsNullOrWhiteSpace(preset.VideoBitrate) ? "8" : preset.VideoBitrate;
             _videoQuality = string.IsNullOrWhiteSpace(preset.VideoQuality) ? "23" : preset.VideoQuality;
-            VideoRateControlCombo.SelectedIndex = preset.VideoRateControl == ExportNames.Quality ? 1 : 0;
+            _videoTargetSize = string.IsNullOrWhiteSpace(preset.VideoTargetSize) ? TargetSize.DefaultMegabytes : preset.VideoTargetSize;
+            VideoRateControlCombo.SelectedIndex = Math.Max(0, Array.FindIndex(RateModes, mode => mode.Value == preset.VideoRateControl));
             RefreshRateControl();
 
             AudioCodecCombo.SelectedItem = AudioCodecs.Contains(preset.AudioCodecName) ? preset.AudioCodecName : ExportNames.Aac;
@@ -487,8 +514,9 @@ public sealed partial class ExportView : UserControl, IDisposable
         VideoCodec = VideoCodecCombo.SelectedItem as string ?? ExportNames.H264,
         VideoPreset = VideoPresetCombo.SelectedItem as string ?? "medium",
         VideoBitrate = _videoBitrate,
-        VideoRateControl = _showingQuality ? ExportNames.Quality : ExportNames.Bitrate,
+        VideoRateControl = _rateMode,
         VideoQuality = _videoQuality,
+        VideoTargetSize = _videoTargetSize,
         UseGpu = VideoGpuCheck.IsChecked == true,
         AudioCodec = AudioCodecCombo.SelectedItem as string ?? ExportNames.Aac,
         AudioBitrate = AudioBitrateCombo.SelectedItem as string ?? "192k",
@@ -561,6 +589,17 @@ public sealed partial class ExportView : UserControl, IDisposable
     });
     private void ClearFinishedOnClick(object? sender, RoutedEventArgs eventArgs) => RunAction(() => _manager?.ClearFinished());
 
+    private async void ShowInFolderOnClick(object? sender, RoutedEventArgs eventArgs)
+    {
+        if (_showInFolderPath is not { } path) return;
+        try { await FileLocation.ShowAsync(TopLevel.GetTopLevel(this), path); }
+        catch (Exception exception)
+        {
+            AppLog.Warn($"Could not show {path} in its folder: {exception.Message}");
+            StatusText.Text = $"Could not open the folder: {exception.Message}";
+        }
+    }
+
     private void RunAction(Action action)
     {
         try { action(); }
@@ -620,6 +659,11 @@ public sealed partial class ExportView : UserControl, IDisposable
             CancelAllButton.IsEnabled = canAct && snapshot.HasUnfinished;
             RemoveJobButton.IsEnabled = canAct && selected is not null && !selected.Job.IsActive;
             RetryJobButton.IsEnabled = canAct && selected?.Job.State is ExportJobState.Failed or ExportJobState.Cancelled;
+            var finishedClip = selected is not null
+                ? selected.Job.State == ExportJobState.Completed ? selected.Job : null
+                : snapshot.Jobs.LastOrDefault(job => job.State == ExportJobState.Completed);
+            _showInFolderPath = finishedClip?.Definition.Options.OutputPath;
+            ShowInFolderButton.IsEnabled = _showInFolderPath is not null;
             MoveUpButton.IsEnabled = canAct && pendingIndex > 0;
             MoveDownButton.IsEnabled = canAct && pendingIndex >= 0 && pendingIndex < pending.Length - 1;
             ClearFinishedButton.IsEnabled = canAct && snapshot.Jobs.Any(job => job.IsFinished);
@@ -662,7 +706,9 @@ public sealed partial class ExportView : UserControl, IDisposable
         var options = job.Definition.Options;
         var crop = options.CropEnabled ? $"{TimeFormat.ClockWithFraction(options.Start)} → {TimeFormat.ClockWithFraction(options.End)}" : "Full video";
         return $"Source: {options.SourcePath}\nOutput: {options.OutputPath}\n{crop} · {CountTracks(options.Tracks.Count(track => track.Enabled))} · {(options.CopyPlaybackSpeed ? options.PlaybackSpeed : 1):0.##}×\n" +
-            $"Video: {(options.VideoAdvanced ? options.VideoAdvancedText : options.VideoCodec)} · Audio: {(options.AudioAdvanced ? options.AudioAdvancedText : options.AudioCodec)}" +
+            $"Video: {(options.VideoAdvanced ? options.VideoAdvancedText : options.VideoCodec)}" +
+            (job.Definition.Command.SizeLimit is { } limit ? $" under {TargetSize.FormatLimit(limit.MaxBytes)}" : "") +
+            $" · Audio: {(options.AudioAdvanced ? options.AudioAdvancedText : options.AudioCodec)}" +
             (job.Definition.Command.Warning is { } warning ? $"\n{warning}" : "") +
             (job.Error is { } error ? $"\n{error}" : "");
     }

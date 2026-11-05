@@ -123,6 +123,7 @@ internal static class IntegrationTests
             }, 1);
         });
         await Program.Test("real queued exports preserve independent crop, audio and speed settings", () => QueuedExports(source, silent));
+        await Program.Test("real target size exports fit the limit, including a forced second attempt", () => TargetSizeExports(source, testNvenc));
         await Program.Test("native playback snapshots, seeks, rapid switches and teardown", () => NativePlayback(source, silent));
         await Program.Test("imports stay at zero during delayed audio setup and then begin at zero", () => ImportAtZero(source, silent));
         await SeekTests.Run();
@@ -193,6 +194,44 @@ internal static class IntegrationTests
                 Program.Check(!File.Exists(job.Definition.TemporaryPath), "Completed queue retained temporary output.");
             }
             Program.Check(jobs.Select(job => job.Definition.Options.OutputPath).Distinct().Count() == 3, "Queue outputs shared a filename.");
+        }
+        finally { await manager.StopAsync(); }
+    }
+
+    private static async Task TargetSizeExports(string source, bool nvenc)
+    {
+        // The first attempt is padded past the limit, so the real retry path runs FFmpeg again.
+        var attempts = 0;
+        var manager = new ExportManager(async (executable, command, log, progress, cancellation) =>
+        {
+            var result = await new FfmpegRunner().RunAsync(executable, command, log, progress, cancellation);
+            if (Interlocked.Increment(ref attempts) == 1 && result.ExitCode == 0)
+                await using (var file = new FileStream(command.Arguments[^1], FileMode.Open)) file.SetLength(command.SizeLimit!.MaxBytes + 1);
+            return result;
+        });
+        try
+        {
+            var encoders = new List<(string Codec, bool Gpu, string Preset)> { ("H.264", false, "ultrafast"), ("AV1", false, "10") };
+            if (nvenc) encoders.AddRange([("H.264", true, "p4"), ("H.265", true, "p4"), ("AV1", true, "p4")]);
+            foreach (var (codec, gpu, preset) in encoders)
+                manager.AddToQueue(Program.Options(4) with
+                {
+                    SourcePath = source, OutputPath = Path.Combine(Program.Temp, $"size-{codec}-{(gpu ? "nvenc" : "cpu")}.mp4"),
+                    VideoCodec = codec, UseGpu = gpu, VideoPreset = preset, AudioBitrate = "128k",
+                    VideoRateControl = "Size", VideoTargetSize = "0.25"
+                });
+            manager.StartQueue();
+            await manager.WhenIdleAsync().WaitAsync(TimeSpan.FromSeconds(120));
+            var jobs = manager.GetSnapshot().Jobs;
+            // CPU AV1 has no rate cap, so it may need another attempt of its own.
+            Program.Check(jobs.All(job => job.State == ExportJobState.Completed) && attempts > jobs.Length,
+                $"Size exports failed or retried unexpectedly ({attempts} runs):\n{string.Join("\n", jobs.Select(job => job.Log))}");
+            Program.Check(jobs[0].Log.Contains("Encoding again"), $"The padded clip was not encoded again:\n{jobs[0].Log}");
+            foreach (var job in jobs)
+            {
+                Program.Check(new FileInfo(job.Definition.Options.OutputPath).Length <= 250_000, $"{Path.GetFileName(job.Definition.Options.OutputPath)} is over 0.25 MB.");
+                await VerifyOutput(job.Definition.Options.OutputPath, job.Definition.Command.DurationSeconds, 1);
+            }
         }
         finally { await manager.StopAsync(); }
     }

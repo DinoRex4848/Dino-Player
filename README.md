@@ -17,7 +17,7 @@ A Windows and Linux video player for reviewing gameplay, choosing audio tracks, 
 - Select individual audio tracks and adjust their volumes before exporting a mix or keeping the tracks separate.
 - Mark clip boundaries on the timeline or enable editable timecodes in Preferences.
 - Export MP4 or MKV clips with H.264, H.265, or AV1, using CPU encoding or NVIDIA NVENC where supported.
-- Choose bitrate or target quality, save export presets, and queue multiple clips while continuing to review videos.
+- Choose bitrate, target quality, or a target size that keeps the clip under an upload limit; save export presets, and queue multiple clips while continuing to review videos.
 - Run portable builds with preferences beside the application and no separate .NET, mpv, or FFmpeg installation.
 
 ## Download and run

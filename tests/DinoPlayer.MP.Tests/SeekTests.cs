@@ -30,6 +30,80 @@ internal static class SeekTests
         await Program.Test("playback preparation waits for its frame and cancels on replacement and shutdown", () => PreparationLifecycle(source));
         var longGop = await CreateFixture(Program.Temp, longGop: true);
         await Program.Test("navigation uses keyframes while absolute jumps remain precise", () => KeyframeSeeks(longGop));
+        await Program.Test("pause and speed changes notify at once with a fresh position", () => InstantStateNotifications(source));
+        await Program.Test("frame steps, exact one-second steps, drag previews and fresh positions", () => ClipNavigation(longGop));
+    }
+
+    private static async Task InstantStateNotifications(string source)
+    {
+        using var engine = new MpvPlaybackEngine(IntPtr.Zero, "seek-state", headless: true);
+        using var probe = new NativePlaybackProbe(engine);
+        var notifications = 0;
+        engine.PositionChanged += _ => Interlocked.Increment(ref notifications);
+        await engine.OpenAsync(source);
+        await Until(() => engine.GetSnapshot().IsLoaded && probe.Restarts > 0);
+        await engine.SetPausedAsync(true);
+        await SeekTo(engine, probe, 20, .02);
+
+        foreach (var paused in new[] { false, true })
+        {
+            var before = Volatile.Read(ref notifications);
+            var sampled = engine.GetSnapshot().SampleTimestamp;
+            await engine.SetPausedAsync(paused);
+            await Until(() => Volatile.Read(ref notifications) > before && engine.GetSnapshot().IsPaused == paused &&
+                              engine.GetSnapshot().SampleTimestamp > sampled,
+                () => $"Changing pause to {paused} did not notify with a new sample.");
+        }
+        // The pause notification carries the paused frame, so the UI does not jump back.
+        await Until(() => Math.Abs(engine.GetSnapshot().PositionSeconds - probe.Position) < .02,
+            () => $"Paused snapshot {engine.GetSnapshot().PositionSeconds} differs from mpv {probe.Position}.");
+
+        var beforeSpeed = Volatile.Read(ref notifications);
+        await engine.AdjustPlaybackSpeedAsync(1);
+        await Until(() => Volatile.Read(ref notifications) > beforeSpeed && Math.Abs(engine.GetSnapshot().PlaybackSpeed - 1.1) < .001,
+            () => "A speed change did not notify.");
+        await engine.AdjustPlaybackSpeedAsync(-1);
+        await Until(() => Math.Abs(engine.GetSnapshot().PlaybackSpeed - 1) < .001);
+    }
+
+    // A keyframe every ten seconds separates fast previews from exact positioning.
+    private static async Task ClipNavigation(string longGop)
+    {
+        const double frame = 1 / 30d;
+        using var engine = new MpvPlaybackEngine(IntPtr.Zero, "seek-clip", headless: true);
+        using var probe = new NativePlaybackProbe(engine);
+        var errors = new ConcurrentQueue<PlaybackError>();
+        engine.Error += errors.Enqueue;
+        await engine.FrameStepAsync(1); // Empty players must ignore frame steps.
+        await engine.OpenAsync(longGop);
+        await Until(() => engine.GetSnapshot().IsLoaded && probe.Restarts > 0);
+        await engine.SetPausedAsync(true);
+        await SeekTo(engine, probe, 23, .02);
+
+        await engine.FrameStepAsync(1);
+        await Until(() => probe.IsPaused && !probe.IsSeeking && Math.Abs(probe.Position - (23 + frame)) < .005,
+            () => $"Frame step landed at {probe.Position}.");
+        await engine.FrameStepAsync(-1);
+        await Until(() => probe.IsPaused && !probe.IsSeeking && Math.Abs(probe.Position - 23) < .005,
+            () => $"Frame back-step landed at {probe.Position}.");
+
+        await Settled(probe, () => engine.SeekRelativeExactAsync(1), 24, .02);
+        await Settled(probe, () => Task.WhenAll(engine.SeekRelativeExactAsync(-1), engine.SeekRelativeExactAsync(-1)), 22, .02);
+        Program.Check(probe.IsPaused, "Exact relative steps resumed paused playback.");
+        Program.Check(Math.Abs(await engine.GetPositionAsync() - probe.Position) < .001, "A fresh position read differs from mpv.");
+
+        var before = probe.Restarts;
+        await engine.SeekPreviewAsync(27);
+        await Until(() => probe.Restarts > before && !probe.IsSeeking && Math.Abs(probe.Position - 10 * Math.Round(probe.Position / 10)) < .08,
+            () => $"A drag preview did not land on a keyframe: {probe.Position}.");
+        Program.Throws<ArgumentOutOfRangeException>(() => engine.SeekPreviewAsync(double.NaN));
+        Program.Throws<ArgumentOutOfRangeException>(() => engine.SeekRelativeExactAsync(double.PositiveInfinity));
+
+        await engine.SetPausedAsync(false);
+        await Task.Delay(300);
+        Program.Check(Math.Abs(await engine.GetPositionAsync() - probe.Position) < .1, "A fresh position read lagged playback.");
+        await engine.SetPausedAsync(true);
+        Program.Check(errors.IsEmpty, string.Join("; ", errors.Select(e => e.Message)));
     }
 
     private static async Task KeyframeSeeks(string source)
