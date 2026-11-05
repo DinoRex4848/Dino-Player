@@ -9,10 +9,17 @@ public sealed partial class MainWindow
     private async void ExportButtonOnClick(object? sender, RoutedEventArgs eventArgs) =>
         await SelectWorkspaceTabAsync(true);
 
-    private void PlayerAddToQueueOnClick(object? sender, RoutedEventArgs eventArgs)
+    private void PlayerAddToQueueOnClick(object? sender, RoutedEventArgs eventArgs) => SubmitFromPlayer(start: false);
+    private void PlayerExportOnClick(object? sender, RoutedEventArgs eventArgs) => SubmitFromPlayer(start: true);
+
+    // Exports or queues the current crop with the Export tab's settings, without
+    // leaving the player. Progress shows in the Export tab header.
+    private void SubmitFromPlayer(bool start)
     {
-        if (!PlayerAddToQueueButton.IsEnabled || _closing || _closed) return;
-        if (ExportPanel.TryAddToQueue(CaptureExportContext(), out var message))
+        if (!PlayerExportButton.IsEnabled || _closing || _closed) return;
+        var context = CaptureExportContext();
+        var message = "";
+        if (start ? ExportPanel.TryExportNow(context, out message) : ExportPanel.TryAddToQueue(context, out message))
         {
             ShowPlayerQueueStatus(message);
             ErrorBanner.IsVisible = false;
@@ -112,8 +119,8 @@ public sealed partial class MainWindow
 
     private void UpdateExportTabHeader(ExportManagerSnapshot snapshot)
     {
-        PlayerAddToQueueButton.IsEnabled = !_closing && !_closed && !snapshot.IsStopping &&
-            _player is not null && PlayPauseButton.IsEnabled;
+        PlayerAddToQueueButton.IsEnabled = PlayerExportButton.IsEnabled = ExportClipMenuItem.IsEnabled =
+            !_closing && !_closed && !snapshot.IsStopping && _player is not null && PlayPauseButton.IsEnabled;
         var details = new List<string>();
         if (snapshot.Active is { } active) details.Add($"{active.Progress:0}%");
         if (snapshot.WaitingCount > 0) details.Add($"{snapshot.WaitingCount} waiting");

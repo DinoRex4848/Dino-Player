@@ -20,6 +20,7 @@
         <MenuItem Header="_File">
           <MenuItem x:Name="OpenMenuItem" Header="_Open…" Click="OpenButtonOnClick" IsEnabled="False" />
           <MenuItem Header="_Export" Click="ExportButtonOnClick" />
+          <MenuItem x:Name="ExportClipMenuItem" Header="Export _clip now" InputGesture="Ctrl+E" Click="PlayerExportOnClick" IsEnabled="False" />
           <Separator />
           <MenuItem x:Name="ExitMenuItem" Header="E_xit" Click="ExitMenuItemOnClick" />
         </MenuItem>
@@ -149,12 +150,14 @@
                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,21,2,0" IsVisible="False" PointerPressed="PlayheadIndicator_PointerPressed" />
         </Grid>
         <Grid x:Name="PlaybackControlsRow" Grid.Row="2" ColumnDefinitions="*,Auto,*" Margin="0,8,0,0">
-          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,0,8,0" ClipToBounds="True"
-                IsVisible="{Binding IsVisible, ElementName=PlayerAddToQueueButton}">
-            <Button x:Name="PlayerAddToQueueButton" Content="Add to queue" HorizontalAlignment="Left" VerticalAlignment="Center"
+          <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8" Margin="0,0,8,0" ClipToBounds="True">
+            <Button x:Name="PlayerExportButton" Content="Export clip" HorizontalAlignment="Left" VerticalAlignment="Center"
+                    IsEnabled="False" Click="PlayerExportOnClick"
+                    ToolTip.Tip="Export the current crop now (Ctrl+E), using the settings currently selected in Export. With Crop off, export the full video." />
+            <Button x:Name="PlayerAddToQueueButton" Grid.Column="1" Content="Add to queue" HorizontalAlignment="Left" VerticalAlignment="Center"
                     IsVisible="False" IsEnabled="False" Click="PlayerAddToQueueOnClick"
                     ToolTip.Tip="Queue the current crop using the settings currently selected in Export. With Crop off, queue the full video." />
-            <TextBlock x:Name="PlayerQueueStatusText" Grid.Column="1" Classes="muted" FontSize="11" IsVisible="False" Opacity="0"
+            <TextBlock x:Name="PlayerQueueStatusText" Grid.Column="2" Classes="muted" FontSize="11" IsVisible="False" Opacity="0"
                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                        ToolTip.Tip="{Binding Text, RelativeSource={RelativeSource Self}}">
               <TextBlock.Transitions>

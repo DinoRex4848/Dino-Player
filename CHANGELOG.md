@@ -9,6 +9,7 @@
 - Videos opened with Dino Player from a file manager, or passed on the command line, load at startup. The Linux launcher offers Dino Player under Open With for common video types.
 - **Show in folder** in the export queue opens the folder of the selected or latest finished clip, highlighting the file where the file manager supports it.
 - **Target size** rate control keeps an export under a size in MB, such as a chat app's upload limit. It works out the video bitrate from the clip length and audio, shows it on the Export tab, and caps the encoder's rate where it supports it. A file that still comes out too big is encoded again at a lower bitrate, up to three attempts. Target sizes are saved with export presets.
+- **Export clip** below the timeline (also **Ctrl+E** and **File → Export clip now**) exports the current crop straight away with the Export tab's settings, without leaving the player.
 
 ### Fixed
 
@@ -19,6 +20,9 @@
 - The play/pause button and speed update as soon as mpv reports the change, instead of on the next 200 ms refresh.
 - While playing, the playhead moves smoothly on every display frame, estimated between mpv's position samples. Clicked seek targets show at once.
 - Changing a track's volume or turning a track on or off no longer pauses playback. Both are applied live while playing (heard after mpv's short audio buffer, about 0.2 s). Unchecked tracks stay in the audio mix at zero volume, so the mix is only rebuilt when a video opens.
+- Opening a video is faster. The audio mix is set up before mpv starts decoding, so it no longer restarts the decoders and seeks back to the start. In testing, a 1440p60 HEVC recording with four tracks was ready in 138 ms instead of 338 ms, and its burst of decoder errors on open is gone.
+- The portable builds start about 2.5× faster (ready in 0.28 s instead of 0.70 s on Linux), because they are precompiled (ReadyToRun) and no longer compressed. The zip downloads are about 20 MB larger.
+- NVENC exports decode the source on the GPU too, using about a third of the CPU time and finishing slightly sooner.
 
 ## 1.5.3 — 2026-10-26
 

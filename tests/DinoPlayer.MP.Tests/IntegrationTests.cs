@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using DinoPlayer.MP;
 using DinoPlayer.MP.Export;
 using DinoPlayer.MP.Playback;
 
@@ -42,6 +43,20 @@ internal static class IntegrationTests
                         VideoRateControl = "Quality", VideoQuality = "23", CropEnabled = true, Start = 0, End = .3
                     }, 0);
                 });
+        if (testNvenc)
+            await Program.Test("FFmpeg NVENC falls back to CPU decoding for sources the GPU can't decode", async () =>
+            {
+                // NVDEC has no 4:4:4 H.264, so this source is decoded on the CPU.
+                var unsupported = Path.Combine(Program.Temp, "yuv444 Ω.mkv");
+                await ProcessAsync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=30:duration=1",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv444p", unsupported]);
+                await ExportAndVerify(Program.Options(0) with
+                {
+                    SourcePath = unsupported, OutputPath = Path.Combine(Program.Temp, "nvenc-fallback.mp4"), Duration = 1,
+                    VideoCodec = "H.264", UseGpu = true, VideoPreset = "p4", Resolution = "1280x720",
+                    CopyPlaybackSpeed = true, PlaybackSpeed = 2
+                }, 0, tolerance: .1);
+            });
         await Program.Test("FFmpeg 4K output dimensions", async () =>
         {
             var output = Path.Combine(Program.Temp, "quality-4k.mp4");
@@ -127,6 +142,7 @@ internal static class IntegrationTests
         await Program.Test("native playback snapshots, seeks, rapid switches and teardown", () => NativePlayback(source, silent));
         await Program.Test("track volume and checkbox changes apply live without restarting playback", () => LiveTrackVolume(source));
         await Program.Test("imports stay at zero during delayed audio setup and then begin at zero", () => ImportAtZero(source, silent));
+        await Program.Test("opening sets up the audio graph before decoding, so saved volumes need no rebuild or rewind", () => OpenWithoutRebuild(source));
         await SeekTests.Run();
     }
 
@@ -259,6 +275,39 @@ internal static class IntegrationTests
             await Until(() => probe.Position > .15);
             Program.Check(probe.Position < 1, $"Prepared import skipped its beginning: {probe.Position}.");
         }
+    }
+
+    private static async Task OpenWithoutRebuild(string source)
+    {
+        using var engine = new MpvPlaybackEngine(IntPtr.Zero, "preload-test", headless: true);
+        using var probe = new NativePlaybackProbe(engine);
+        var rebuilds = 0;
+        void Count(string message) { if (message.Contains("] Audio mix applied:", StringComparison.Ordinal)) Interlocked.Increment(ref rebuilds); }
+        AppLog.MessageWritten += Count;
+        try
+        {
+            for (var open = 0; open < 2; open++)
+            {
+                await engine.OpenAsync(source, startPaused: true);
+                await Until(() => engine.GetSnapshot().IsLoaded && engine.GetSnapshot().Generation == engine.Generation && probe.Restarts > 0);
+                var restarts = probe.Restarts;
+                // The window applies saved volumes, then rewinds to the start, as when opening a video.
+                foreach (var track in engine.AudioTracks) track.VolumePercent = 80;
+                engine.AudioTracks[1].Enabled = false;
+                await engine.ApplyAudioMixAsync();
+                await engine.SeekAndWaitAsync(0);
+                Program.Check(rebuilds == 0 && probe.Restarts == restarts && probe.Position < .001 && probe.IsPaused,
+                    $"Opening rebuilt the audio graph ({rebuilds}) or decoded the first frame again ({probe.Restarts - restarts}).");
+                await engine.SetPausedAsync(false);
+                await Until(() => probe.Position > .15);
+                await engine.SetPausedAsync(true);
+            }
+            // After playing, a rewind seeks again.
+            var before = probe.Restarts;
+            await engine.SeekAndWaitAsync(0);
+            Program.Check(probe.Restarts > before && probe.Position < .05, "A rewind after playback did not seek.");
+        }
+        finally { AppLog.MessageWritten -= Count; }
     }
 
     private static async Task NativePlayback(string source, string silent)

@@ -24,8 +24,9 @@ public static class PlaybackShortcut
     /// <summary>Whether the player already uses this shortcut, so a speed shortcut cannot be set to it.</summary>
     public static bool IsPlayerKey(string keyName, string modifierText) =>
         IsReserved(keyName) ||
-        (TryParse(keyName, modifierText, out var key, out var modifiers) && modifiers == KeyModifiers.None &&
-         UnmodifiedPlayerKeys.Contains(key));
+        (TryParse(keyName, modifierText, out var key, out var modifiers) &&
+         (modifiers == KeyModifiers.None && UnmodifiedPlayerKeys.Contains(key) ||
+          modifiers == KeyModifiers.Control && key == PhysicalKey.E));
 
     public static string Format(string keyName, string modifiers)
     {

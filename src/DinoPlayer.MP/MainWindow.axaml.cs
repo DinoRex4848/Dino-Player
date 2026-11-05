@@ -334,7 +334,8 @@ public sealed partial class MainWindow : Window
         TimelineCanvas.IsEnabled = FullscreenTimelineSlider.IsEnabled = enabled;
         FullscreenButton.IsEnabled = CropToggle.IsEnabled = enabled;
         SkipBackButton.IsEnabled = SkipForwardButton.IsEnabled = enabled;
-        PlayerAddToQueueButton.IsEnabled = enabled && !_closing && !_exportManager.IsStopping;
+        PlayerAddToQueueButton.IsEnabled = PlayerExportButton.IsEnabled = ExportClipMenuItem.IsEnabled =
+            enabled && !_closing && !_exportManager.IsStopping;
     }
 
     private async void RunPlayerAction(Func<IPlaybackEngine, Task> action)

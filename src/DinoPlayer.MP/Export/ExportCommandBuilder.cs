@@ -18,6 +18,11 @@ internal static class ExportCommandBuilder
         var videoFlags = options.VideoAdvanced ? ParseArguments(options.VideoAdvancedText) : [];
         var audioFlags = options.AudioAdvanced && options.Tracks.Any(t => t.Enabled) ? ParseArguments(options.AudioAdvancedText) : [];
         var args = new List<string> { "-hide_banner", "-progress", "pipe:1", "-nostats" };
+        // NVENC exports also decode on the GPU, using about a third of the CPU time. Frames
+        // still come back to system memory, so the CPU filters work, and FFmpeg decodes on
+        // the CPU when the GPU can't handle the source (for example 4:4:4 H.264).
+        if (options.UseGpu && !options.VideoAdvanced && options.VideoCodec != ExportNames.Copy)
+            args.AddRange(["-hwaccel", "cuda"]);
         if (options.CropEnabled)
         {
             args.Add("-ss");

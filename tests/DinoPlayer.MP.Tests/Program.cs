@@ -147,6 +147,8 @@ internal static class Program
                     Check(Value(quality, "-rc") == (gpu ? "vbr" : null), "NVENC quality did not select VBR.");
                     var bitrate = ExportCommandBuilder.Build(Options() with { VideoCodec = codec, UseGpu = gpu, VideoBitrate = "6.5", VideoQuality = "invalid inactive value" }).Arguments;
                     Check(Value(bitrate, "-b:v") == "6.5M" && Value(bitrate, "-crf") is null && Value(bitrate, "-cq") is null, "Bitrate behavior changed.");
+                    Check(Value(bitrate, "-hwaccel") == (gpu ? "cuda" : null) && Value(quality, "-hwaccel") == (gpu ? "cuda" : null) &&
+                          bitrate.ToList().IndexOf("-hwaccel") < bitrate.ToList().IndexOf("-i"), "GPU decoding was not set before the input.");
                 }
                 return Task.CompletedTask;
             });
@@ -166,6 +168,9 @@ internal static class Program
                 ExportCommandBuilder.Build(ignored with { VideoCodec = "Copy" });
                 var advanced = ExportCommandBuilder.Build(ignored with { VideoAdvanced = true, VideoAdvancedText = "-c:v libx264 -crf 17" }).Arguments;
                 Check(Value(advanced, "-crf") == "17" && Value(advanced, "-b:v") is null, "Simple settings leaked into Advanced.");
+                Check(Value(ExportCommandBuilder.Build(ignored with { VideoAdvanced = true, UseGpu = true, VideoAdvancedText = "-c:v h264_nvenc" }).Arguments, "-hwaccel") is null &&
+                      Value(ExportCommandBuilder.Build(ignored with { VideoCodec = "Copy", UseGpu = true }).Arguments, "-hwaccel") is null,
+                    "GPU decoding was added to Advanced or Copy exports.");
                 Throws<ArgumentException>(() => ExportCommandBuilder.Build(ignored));
                 Throws<ArgumentException>(() => SettingsStore.AddOrUpdateExportPreset(new() { Name = "bad quality", VideoRateControl = "Quality", VideoQuality = "52" }));
                 SettingsStore.AddOrUpdateExportPreset(new() { Name = "quality", VideoRateControl = "Quality", VideoQuality = "19", VideoBitrate = "NaN" });
@@ -451,6 +456,8 @@ internal static class Program
                     Check(!PlaybackShortcut.IsPlayerKey(key, "Ctrl"), $"Ctrl+{key} was blocked.");
                     Check(!PlaybackShortcut.IsReserved(key), $"{key} would reset saved shortcuts on load.");
                 }
+                Check(PlaybackShortcut.IsPlayerKey("E", "Ctrl") && !PlaybackShortcut.IsPlayerKey("E", "None") &&
+                      !PlaybackShortcut.IsPlayerKey("E", "Ctrl+Shift") && !PlaybackShortcut.IsReserved("E"), "Ctrl+E export is not protected exactly.");
                 Check(PlaybackShortcut.IsPlayerKey("ArrowLeft", "Ctrl") && PlaybackShortcut.IsPlayerKey("Space", "Shift"),
                     "Fixed keys became available with modifiers.");
                 Check(!PlaybackShortcut.IsPlayerKey("Equal", "None") && !PlaybackShortcut.IsPlayerKey("BracketLeft", "None"),

@@ -208,11 +208,14 @@ public sealed partial class ExportView : UserControl, IDisposable
             ApplyPreset(preset);
     }
 
-    internal bool TryAddToQueue(ExportContext context, out string message)
+    internal bool TryAddToQueue(ExportContext context, out string message) => TrySubmitFromPlayer(context, start: false, out message);
+    internal bool TryExportNow(ExportContext context, out string message) => TrySubmitFromPlayer(context, start: true, out message);
+
+    private bool TrySubmitFromPlayer(ExportContext context, bool start, out string message)
     {
         EnsureDefaultsInitialized();
         SetContext(context);
-        return TrySubmit(start: false, out message);
+        return TrySubmit(start, out message);
     }
 
     private string BuildSourceDescription()

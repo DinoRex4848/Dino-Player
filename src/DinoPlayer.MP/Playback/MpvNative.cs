@@ -132,6 +132,20 @@ internal static class MpvNative
         public readonly IntPtr Data;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal readonly struct MpvEventHook
+    {
+        public readonly IntPtr Name;
+        public readonly ulong Id;
+    }
+
+    [DllImport(LogicalLibraryName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int mpv_hook_add(IntPtr context, ulong replyUserData,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int priority);
+
+    [DllImport(LogicalLibraryName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int mpv_hook_continue(IntPtr context, ulong id);
+
     [DllImport(LogicalLibraryName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int mpv_observe_property(IntPtr context, ulong userData,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int format);

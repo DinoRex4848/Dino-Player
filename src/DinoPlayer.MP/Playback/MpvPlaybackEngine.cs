@@ -23,6 +23,8 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     private const int MpvEventSeek = 20;
     private const int MpvEventPlaybackRestart = 21;
     private const int MpvEventPropertyChange = 22;
+    private const int MpvEventHook = 25;
+    private const ulong PreloadedHookId = 1;
 
     // Reply ids for observed properties. time-pos is not observed: it changes
     // every frame, so PollEvent samples it at the UI cadence instead.
@@ -70,6 +72,13 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     // The mix last applied to the current media (mpv thread only). Volume-only
     // changes to it are sent as af-command instead of rebuilding the graph.
     private AudioMix? _appliedMix;
+    private bool _preloadedHook;
+    // Tracks found for the current media (mpv thread only), so file-loaded reuses them.
+    private bool _tracksDiscovered;
+    // Still on the first frame of a freshly loaded file (mpv thread only): nothing
+    // has seeked or rebuilt the audio graph since loading, and that frame is ready.
+    private bool _seekedSinceLoad;
+    private bool _startReady;
     private SeekCompletion? _pendingSeekCompletion;
 
     public MpvPlaybackEngine(IntPtr windowHandle, string handleDescriptor) : this(windowHandle, handleDescriptor, false) { }
@@ -150,6 +159,10 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             Check(MpvNative.mpv_request_log_messages(_context, "info"), "mpv_request_log_messages");
             LoadInputBridge();
             ObserveProperties();
+            // Lets the audio graph be set before the decoders start (see OnPreloaded).
+            // Older libmpv builds without hooks set it after loading, as before.
+            _preloadedHook = MpvNative.mpv_hook_add(_context, PreloadedHookId, "on_preloaded", 0) >= 0;
+            if (!_preloadedHook) AppLog.Warn("libmpv has no on_preloaded hook; audio will be set up after each video loads.");
         }
         catch
         {
@@ -205,6 +218,9 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             if (generation != Generation) return 0;
             Volatile.Write(ref _audioTracks, Array.Empty<AudioTrack>());
             _mediaLoaded = false;
+            _tracksDiscovered = false;
+            _seekedSinceLoad = false;
+            _startReady = false;
             _videoReady = false;
             _hardwareDecodeAttempted = false;
             _hardwareDecodeFallback = false;
@@ -297,6 +313,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         {
             if (generation != Generation || _activeGeneration != generation || !_mediaLoaded) return;
             // Stepping past either end is not an error worth a banner.
+            _seekedSinceLoad = true;
             try { CommandNative(direction > 0 ? "frame-step" : "frame-back-step"); }
             catch (InvalidOperationException exception) { AppLog.Warn($"Frame step ignored: {exception.Message}"); }
         });
@@ -335,6 +352,15 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
                     _pendingSeekCompletion?.Completion.TrySetCanceled();
                     _pendingSeekCompletion = request;
                 }
+                // A freshly loaded file is already at its start: wait for that first
+                // frame instead of decoding it again (about 130 ms on a 1440p60 HEVC file).
+                if (request.Seconds == 0 && !_seekedSinceLoad && GetFlagNative("pause", false) &&
+                    Math.Abs(GetDoubleNative("time-pos", 0)) < .001)
+                {
+                    if (_startReady) CompletePendingSeek();
+                    return 0;
+                }
+                _seekedSinceLoad = true;
                 CommandNative("seek", request.Seconds.ToString("0.###", CultureInfo.InvariantCulture), "absolute+exact");
                 return 0;
             }).ConfigureAwait(false);
@@ -381,6 +407,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         return QueueNativeOperation("seek", () =>
         {
             if (generation != Generation || _activeGeneration != generation || !_mediaLoaded) return;
+            _seekedSinceLoad = true;
             CommandNative("seek", seconds.ToString("0.###", CultureInfo.InvariantCulture), flags);
             AppLog.Info($"Seek requested: generation={generation}; seconds={seconds:0.###}; flags={flags}");
         });
@@ -561,6 +588,9 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             case MpvEventPropertyChange:
                 UpdateObservedProperty(mpvEvent);
                 break;
+            case MpvEventHook:
+                HandleHook(mpvEvent);
+                break;
             case MpvEventFileLoaded:
                 if (_activeGeneration == Generation) OnFileLoaded();
                 break;
@@ -574,11 +604,14 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
                 TryApplyPendingAudioMix("video-reconfig");
                 break;
             case MpvEventSeek:
+                // mpv also reports a seek while loading; only later ones move away from the start.
+                if (_activeGeneration == Generation && _startReady) _seekedSinceLoad = true;
                 RefreshPosition(notify: true, seeking: true);
                 break;
             case MpvEventPlaybackRestart:
                 if (_activeGeneration != Generation) break;
                 _videoReady = true;
+                _startReady = !_seekedSinceLoad;
                 LogAndValidateOutput("playback-restart");
                 TryApplyPendingAudioMix("playback-restart");
                 RefreshPosition(notify: true, seeking: false);
@@ -646,7 +679,8 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     {
         try
         {
-            Volatile.Write(ref _audioTracks, DiscoverAudioTracks());
+            if (!_tracksDiscovered) Volatile.Write(ref _audioTracks, DiscoverAudioTracks());
+            _tracksDiscovered = true;
             _mediaLoaded = true;
             _videoReady = false;
 
@@ -656,7 +690,8 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             var duration = GetDoubleNative("duration", 0);
             AppLog.Info($"Media loaded: generation={Volatile.Read(ref _mediaGeneration)}; codec={GetStringNative("video-codec") ?? "none"}; " +
                         $"format={GetStringNative("video-format") ?? "unknown"}; size={width}x{height}; fps={fps:0.###}; " +
-                        $"duration={duration:0.###}s; audio tracks={_audioTracks.Count}; audio graph deferred until video-ready");
+                        $"duration={duration:0.###}s; audio tracks={_audioTracks.Count}; audio graph " +
+                        (_appliedMix is null ? "deferred until video-ready" : "set before decoding"));
             LogAndValidateOutput("file-loaded");
             TryApplyPendingAudioMix("file-loaded");
             ScheduleVideoReadyProbe(Volatile.Read(ref _mediaGeneration));
@@ -668,6 +703,34 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             AppLog.Error($"Failed while configuring loaded media: {exception}");
             ReportError(exception.Message);
         }
+    }
+
+    private void HandleHook(MpvNative.MpvEvent mpvEvent)
+    {
+        if (mpvEvent.Data == IntPtr.Zero) return;
+        var hook = Marshal.PtrToStructure<MpvNative.MpvEventHook>(mpvEvent.Data);
+        // mpv waits for every hook to continue, so always continue it.
+        try { if (mpvEvent.ReplyUserData == PreloadedHookId && _activeGeneration == Generation) OnPreloaded(); }
+        catch (Exception exception) { AppLog.Warn($"Could not set up audio before decoding; it will be set up after loading: {exception.Message}"); }
+        finally { MpvNative.mpv_hook_continue(_context, hook.Id); }
+    }
+
+    // Runs after the file is opened and before decoders start. Changing lavfi-complex
+    // later restarts the decoders and refresh-seeks, which took about 200 ms on a
+    // 1440p60 HEVC recording. The track layout doesn't depend on volumes, so it is
+    // set here with every track at its default volume; the saved volumes then reach
+    // mpv as live af-command changes (see ApplyAudioMixNative).
+    private void OnPreloaded()
+    {
+        _appliedMix = null;
+        var tracks = DiscoverAudioTracks();
+        Volatile.Write(ref _audioTracks, tracks);
+        _tracksDiscovered = true;
+        var mix = AudioMixGraph.Build(tracks);
+        if (mix.Complex.Length == 0) return;
+        SetPropertyNative("lavfi-complex", mix.Complex);
+        SetPropertyNative("af", mix.Filters);
+        _appliedMix = mix;
     }
 
     private void HandleEndFile(MpvNative.MpvEvent mpvEvent)
@@ -786,7 +849,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         {
             _audioMixOperationQueued = false;
             request = _pendingAudioMix;
-            if (request is not null && request.Generation == Generation && (!_mediaLoaded || !_videoReady)) return;
+            if (request is not null && request.Generation == Generation && (!_mediaLoaded || !_videoReady && !IsGainChange(request))) return;
             _pendingAudioMix = null;
         }
 
@@ -822,6 +885,10 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
         ExecutePendingAudioMix(source);
     }
+
+    // Volume changes to the applied graph are af-commands, which don't restart
+    // decoding, so they need not wait for the video output.
+    private bool IsGainChange(AudioMixRequest request) => _appliedMix is { } applied && applied.HasSameTracks(request.Mix);
 
     private void CompletePendingAudioMix(Exception? error = null)
     {
@@ -909,6 +976,9 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         // Clear the gains first, so the old af graph never receives the new
         // channel count. A failure part-way leaves no mix to change live.
         _appliedMix = null;
+        // A new graph restarts the decoders and refresh-seeks.
+        _seekedSinceLoad = true;
+        _startReady = false;
         SetPropertyNative("af", string.Empty);
         SetPropertyNative("lavfi-complex", mix.Complex);
         if (mix.Complex.Length == 0)

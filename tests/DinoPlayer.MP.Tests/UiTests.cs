@@ -198,6 +198,7 @@ internal static class UiTests
                 Program.Check(ExportManagerTests.Job(manager, firstQueued).Definition.Options.Start == .1 && ExportManagerTests.Job(manager, secondQueued).Definition.Options.Start == .9, "Queued crop snapshots changed.");
                 Console.WriteLine("PASS UI queue add, captured crops, selection, reorder, pause, resume and cancellation");
                 CheckShowInFolder(export, manager, secondQueued);
+                await CheckPlayerExport(main, export, manager, runner);
 
                 Click(export, "StartExportButton");
                 execution = await runner.Next();
@@ -494,6 +495,38 @@ internal static class UiTests
         main.Width = 1280; main.Height = 860;
         await CheckPlayerQueueFeedback(main, manager);
         Console.WriteLine("PASS UI player queue shortcut first-use defaults, snapshots, validation, feedback, full video and preferences");
+    }
+
+    // Export clip and Ctrl+E start an export at once, from the player, without switching tabs.
+    private static async Task CheckPlayerExport(MainWindow main, ExportView export, ExportManager manager, ExportManagerTests.ControlledRunner runner)
+    {
+        await SwitchTab(main, false);
+        var crop = Control<ToggleButton>(main, "CropToggle");
+        crop.IsChecked = true;
+        Call(main, "SetCropValues", .2d, .8d);
+        var button = Control<Button>(main, "PlayerExportButton");
+        Program.Check(button.IsVisible && button.IsEnabled && Control<MenuItem>(main, "ExportClipMenuItem").IsEnabled, "Export clip is unavailable.");
+        Click(main, "PlayerExportButton");
+        var execution = await runner.Next();
+        var job = manager.GetSnapshot().Active!;
+        Program.Check(!job.IsQueueJob && job.Definition.Options is { CropEnabled: true, Start: .2, End: .8 } && !export.IsVisible &&
+                      Control<TextBlock>(main, "PlayerQueueStatusText").Text!.StartsWith("Export scheduled:"),
+            "Export clip did not start the current crop at once from the player.");
+        execution.Succeed();
+        await manager.WhenIdleAsync();
+
+        crop.IsChecked = false;
+        var ctrlE = new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.E, PhysicalKey = PhysicalKey.E, KeyModifiers = KeyModifiers.Control };
+        Control<Grid>(main, "RootGrid").RaiseEvent(ctrlE);
+        execution = await runner.Next();
+        Program.Check(ctrlE.Handled && !manager.GetSnapshot().Active!.Definition.Options.CropEnabled, "Ctrl+E did not export the full video.");
+        execution.Succeed();
+        await manager.WhenIdleAsync();
+        var plainE = new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.E, PhysicalKey = PhysicalKey.E };
+        Control<Grid>(main, "RootGrid").RaiseEvent(plainE);
+        Program.Check(!plainE.Handled && !manager.GetSnapshot().IsRunning, "E without Ctrl started an export.");
+        await SwitchTab(main, true);
+        Console.WriteLine("PASS UI Export clip and Ctrl+E export at once from the player");
     }
 
     private static async Task CheckPlayerQueueFeedback(MainWindow main, ExportManager manager)

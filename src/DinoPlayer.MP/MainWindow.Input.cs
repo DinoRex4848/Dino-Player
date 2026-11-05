@@ -165,6 +165,12 @@ public sealed partial class MainWindow
             RunPlayerAction(player => player.TogglePauseAsync());
             eventArgs.Handled = true;
         }
+        else if (IsKey(eventArgs, Key.E, PhysicalKey.E) && (eventArgs.KeyModifiers &
+                     (KeyModifiers.Shift | KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) == KeyModifiers.Control)
+        {
+            SubmitFromPlayer(start: true);
+            eventArgs.Handled = true;
+        }
         else if (eventArgs.Key is Key.Left or Key.Right)
         {
             // Shift moves one second exactly; otherwise jump about five seconds to a keyframe.
