@@ -67,6 +67,9 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     private bool _hardwareDecodeFallback;
     private AudioMixRequest? _pendingAudioMix;
     private bool _audioMixOperationQueued;
+    // The mix last applied to the current media (mpv thread only). Volume-only
+    // changes to it are sent as af-command instead of rebuilding the graph.
+    private AudioMix? _appliedMix;
     private SeekCompletion? _pendingSeekCompletion;
 
     public MpvPlaybackEngine(IntPtr windowHandle, string handleDescriptor) : this(windowHandle, handleDescriptor, false) { }
@@ -210,6 +213,8 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             CompletePendingSeek(new OperationCanceledException("Media changed while preparing playback."));
             if (startPaused) SetPausedNative(true);
             SetPropertyNative("speed", "1");
+            _appliedMix = null;
+            SetPropertyNative("af", string.Empty);
             SetPropertyNative("lavfi-complex", string.Empty);
             SetPropertyNative("aid", "no");
             CommandNative("loadfile", fullPath, "replace");
@@ -425,7 +430,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             Enabled = track.Enabled,
             VolumePercent = track.VolumePercent
         }).ToArray();
-        var graph = AudioMixGraph.Build(tracks);
+        var mix = AudioMixGraph.Build(tracks);
         var enabled = tracks.Where(track => track.Enabled)
             .Select(track => $"aid={track.Id}@{track.VolumePercent:0}%")
             .ToArray();
@@ -438,7 +443,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
                 ? _pendingAudioMix.Completion
                 : new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             if (_pendingAudioMix?.Generation != generation) _pendingAudioMix?.Completion.TrySetResult();
-            _pendingAudioMix = new AudioMixRequest(generation, graph,
+            _pendingAudioMix = new AudioMixRequest(generation, mix,
                 enabled.Length == 0 ? "all muted" : string.Join(", ", enabled), completion);
             if (!_audioMixOperationQueued)
             {
@@ -889,15 +894,29 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
     private void ApplyAudioMixNative(AudioMixRequest request, string source)
     {
+        var mix = request.Mix;
+        // Not logged: a slider drag sends these up to 30 times a second.
+        if (_appliedMix is { } applied && applied.HasSameTracks(mix) && TryChangeGainsNative(applied, mix))
+        {
+            _appliedMix = mix;
+            return;
+        }
+
         var positionBefore = GetDoubleNative("time-pos", 0);
         var pausedBefore = GetFlagNative("pause", false);
         var started = Stopwatch.GetTimestamp();
 
-        SetPropertyNative("lavfi-complex", request.Graph);
-        if (request.Graph.Length == 0)
+        // Clear the gains first, so the old af graph never receives the new
+        // channel count. A failure part-way leaves no mix to change live.
+        _appliedMix = null;
+        SetPropertyNative("af", string.Empty);
+        SetPropertyNative("lavfi-complex", mix.Complex);
+        if (mix.Complex.Length == 0)
         {
             SetPropertyNative("aid", "no");
         }
+        SetPropertyNative("af", mix.Filters);
+        _appliedMix = mix;
 
         var elapsedSeconds = Stopwatch.GetElapsedTime(started).TotalSeconds;
         var positionAfter = GetDoubleNative("time-pos", positionBefore);
@@ -920,7 +939,28 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         }
 
         AppLog.Info($"Audio mix applied: source={source}; generation={request.Generation}; enabled={request.Description}; " +
-                    $"position={positionBefore:0.000}; paused={pausedBefore}; graph={request.Graph}");
+                    $"position={positionBefore:0.000}; paused={pausedBefore}; graph={mix.Complex}; filters={mix.Filters}");
+    }
+
+    // Changes each track's volume filter in place. Returns false (after logging)
+    // when mpv rejects a command, so the caller rebuilds the graph instead.
+    private bool TryChangeGainsNative(AudioMix applied, AudioMix mix)
+    {
+        try
+        {
+            for (var index = 0; index < mix.Gains.Length; index++)
+            {
+                if (mix.Gains[index] == applied.Gains[index]) continue;
+                CommandNative("af-command", AudioMixGraph.FilterLabel, "volume",
+                    AudioMixGraph.FormatGain(mix.Gains[index]), AudioMixGraph.VolumeFilterName(index));
+            }
+            return true;
+        }
+        catch (InvalidOperationException exception)
+        {
+            AppLog.Warn($"Live volume change failed; rebuilding the audio graph: {exception.Message}");
+            return false;
+        }
     }
 
     private Task<T> InvokeOnMpvThreadAsync<T>(Func<T> operation)
@@ -1131,6 +1171,6 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
     public void Dispose() => _ = StopAsync();
 
-    private sealed record AudioMixRequest(long Generation, string Graph, string Description, TaskCompletionSource Completion);
+    private sealed record AudioMixRequest(long Generation, AudioMix Mix, string Description, TaskCompletionSource Completion);
     private sealed record SeekCompletion(long Generation, double Seconds, TaskCompletionSource Completion);
 }

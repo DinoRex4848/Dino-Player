@@ -172,6 +172,36 @@ internal static class Program
                 Check(SettingsStore.FindExportPreset("quality")!.VideoQuality == "19", "Saving quality validated inactive bitrate.");
                 return Task.CompletedTask;
             });
+            await Test("audio mix keeps track routing and gains apart so volumes change live", () =>
+            {
+                static AudioTrack Track(long id, bool enabled, double volume) => new() { Id = id, Label = $"Track {id}", Enabled = enabled, VolumePercent = volume };
+                var culture = System.Globalization.CultureInfo.CurrentCulture;
+                System.Globalization.CultureInfo.CurrentCulture = new("de-DE");
+                try
+                {
+                    var none = AudioMixGraph.Build([]);
+                    Check(none is { Complex: "", Filters: "", TrackIds.IsEmpty: true }, "A file without audio produced a graph.");
+                    var one = AudioMixGraph.Build([Track(2, true, 33.33)]);
+                    Check(one.Complex == "[aid2]aformat=channel_layouts=stereo[ao]" && one.Filters == "@dinotracks:lavfi=[volume@t0=0.333]",
+                        $"Wrong single-track mix: {one.Complex} / {one.Filters}");
+                    // Unchecked tracks stay in the graph at gain 0, so checking them is a live volume change.
+                    var three = AudioMixGraph.Build([Track(1, true, 50), Track(2, false, 80), Track(3, true, 200)]);
+                    Check(three.Complex == "[aid1]aformat=channel_layouts=stereo[s0];[aid2]aformat=channel_layouts=stereo[s1];" +
+                          "[aid3]aformat=channel_layouts=stereo[s2];[s0][s1][s2]amerge=inputs=3[ao]", $"Wrong track routing: {three.Complex}");
+                    Check(three.Filters == "@dinotracks:lavfi=[asplit=3[i0][i1][i2];[i0]pan=stereo|c0=c0|c1=c1,volume@t0=0.5[m0];" +
+                          "[i1]pan=stereo|c0=c2|c1=c3,volume@t1=0[m1];[i2]pan=stereo|c0=c4|c1=c5,volume@t2=1.5[m2];[m0][m1][m2]amix=inputs=3:normalize=0]",
+                        $"Wrong gain graph: {three.Filters}");
+                    Check(three.TrackIds.SequenceEqual([1L, 2, 3]) && three.Gains.SequenceEqual([.5, 0, 1.5]), "Wrong tracks or clamped gains.");
+                    Check(AudioMixGraph.Build([Track(1, true, double.NaN)]).Gains.Single() == 0, "A non-finite volume was not silenced.");
+                    var toggled = AudioMixGraph.Build([Track(1, false, 50), Track(2, true, 80), Track(3, true, 100)]);
+                    Check(toggled.HasSameTracks(three) && toggled.Gains.SequenceEqual([0, .8, 1]) && toggled.Complex == three.Complex,
+                        "Checking or unchecking a track changed the graph.");
+                    Check(!toggled.HasSameTracks(one) && !three.HasSameTracks(none), "Different track sets were treated as the same.");
+                    Check(AudioMixGraph.VolumeFilterName(2) == "volume@t2" && AudioMixGraph.FormatGain(1.25) == "1.25", "Live command names or values changed.");
+                }
+                finally { System.Globalization.CultureInfo.CurrentCulture = culture; }
+                return Task.CompletedTask;
+            });
             await Test("target size bitrate follows clip length, audio and encoder caps", () =>
             {
                 var options = Options(2) with { VideoRateControl = "Size", VideoTargetSize = "10", Duration = 20, AudioBitrate = "192k" };

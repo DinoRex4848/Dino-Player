@@ -18,6 +18,7 @@
 
 - The play/pause button and speed update as soon as mpv reports the change, instead of on the next 200 ms refresh.
 - While playing, the playhead moves smoothly on every display frame, estimated between mpv's position samples. Clicked seek targets show at once.
+- Changing a track's volume or turning a track on or off no longer pauses playback. Both are applied live while playing (heard after mpv's short audio buffer, about 0.2 s). Unchecked tracks stay in the audio mix at zero volume, so the mix is only rebuilt when a video opens.
 
 ## 1.5.3 — 2026-10-26
 

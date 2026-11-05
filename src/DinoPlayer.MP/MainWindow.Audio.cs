@@ -158,10 +158,11 @@ public sealed partial class MainWindow
         }
     }
 
+    // Sends the latest track settings at most once per interval, also while a
+    // slider is still moving: volume changes apply live without a graph rebuild.
     private void QueueMixUpdate()
     {
-        _mixTimer.Stop();
-        _mixTimer.Start();
+        if (!_mixTimer.IsEnabled) _mixTimer.Start();
     }
 
     private void ApplyPendingMix(object? sender, EventArgs eventArgs)

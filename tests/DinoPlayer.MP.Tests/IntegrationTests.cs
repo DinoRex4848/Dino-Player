@@ -125,6 +125,7 @@ internal static class IntegrationTests
         await Program.Test("real queued exports preserve independent crop, audio and speed settings", () => QueuedExports(source, silent));
         await Program.Test("real target size exports fit the limit, including a forced second attempt", () => TargetSizeExports(source, testNvenc));
         await Program.Test("native playback snapshots, seeks, rapid switches and teardown", () => NativePlayback(source, silent));
+        await Program.Test("track volume and checkbox changes apply live without restarting playback", () => LiveTrackVolume(source));
         await Program.Test("imports stay at zero during delayed audio setup and then begin at zero", () => ImportAtZero(source, silent));
         await SeekTests.Run();
     }
@@ -288,11 +289,8 @@ internal static class IntegrationTests
             concurrentMixes.Add(engine.ApplyAudioMixAsync());
         }
         await Task.WhenAll(concurrentMixes);
-        var nativeWorker = (PlaybackWorker)typeof(MpvPlaybackEngine).GetField("_worker",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(engine)!;
-        var graph = await nativeWorker.InvokeAsync(() => (string?)typeof(MpvPlaybackEngine).GetMethod("GetStringNative",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(engine, ["lavfi-complex"]));
-        Program.Check(graph?.Contains("volume=1.29", StringComparison.Ordinal) == true,
+        var applied = await OnWorker(engine, () => AppliedMix(engine));
+        Program.Check(applied is { Gains.Length: 4 } && applied.Gains.All(gain => gain == 1.29),
             "An older audio mix replaced the latest slider values.");
         await engine.AdjustPlaybackSpeedAsync(1);
         await Until(() => Math.Abs(engine.GetSnapshot().PlaybackSpeed - 1.1) < .01);
@@ -323,6 +321,58 @@ internal static class IntegrationTests
         await Until(() => recreated.GetSnapshot().IsLoaded);
         await recreated.StopAsync().WaitAsync(TimeSpan.FromSeconds(5));
     }
+
+    private static async Task LiveTrackVolume(string source)
+    {
+        using var engine = new MpvPlaybackEngine(IntPtr.Zero, "live-volume", headless: true);
+        using var probe = new NativePlaybackProbe(engine);
+        await engine.OpenAsync(source);
+        await Until(() => engine.GetSnapshot().IsLoaded && engine.AudioTracks.Count == 4);
+        await engine.ApplyAudioMixAsync();
+        // Let the first graph's own restart settle before counting.
+        await Task.Delay(300);
+        await Until(() => !probe.IsSeeking && probe.Position > .2);
+        var graph = await OnWorker(engine, () => NativeString(engine, "lavfi-complex"));
+        var restarts = probe.Restarts;
+        var position = probe.Position;
+        for (var i = 0; i < 10; i++)
+        {
+            foreach (var track in engine.AudioTracks) track.VolumePercent = 20 + i * 10;
+            await engine.ApplyAudioMixAsync();
+            await Task.Delay(30);
+        }
+        await Task.Delay(200);
+        Program.Check(probe.Restarts == restarts && !probe.IsSeeking, $"Volume changes restarted playback {probe.Restarts - restarts} times.");
+        Program.Check(probe.Position > position + .3, $"Playback stalled during volume changes: {position:0.000} → {probe.Position:0.000}.");
+        Program.Check(await OnWorker(engine, () => NativeString(engine, "lavfi-complex")) == graph, "A volume change rebuilt the track graph.");
+        Program.Check(await OnWorker(engine, () => AppliedMix(engine)) is { } live && live.Gains.All(gain => gain == 1.1), "The last volume was not applied.");
+
+        // Unchecking and rechecking a track is a live volume change too.
+        engine.AudioTracks[1].Enabled = false;
+        await engine.ApplyAudioMixAsync();
+        var off = await OnWorker(engine, () => AppliedMix(engine));
+        Program.Check(off is { Gains.Length: 4 } && off.Gains[1] == 0 && off.Gains[0] == 1.1, "Unchecking a track did not silence only that track.");
+        engine.AudioTracks[1].Enabled = true;
+        engine.AudioTracks[0].VolumePercent = 75;
+        await engine.ApplyAudioMixAsync();
+        var on = await OnWorker(engine, () => AppliedMix(engine));
+        Program.Check(on is { Gains.Length: 4 } && on.Gains[0] == .75 && on.Gains[1] == 1.1, "Rechecking a track did not restore its volume.");
+        await Task.Delay(100);
+        Program.Check(probe.Restarts == restarts && await OnWorker(engine, () => NativeString(engine, "lavfi-complex")) == graph,
+            "Checking or unchecking a track rebuilt the graph or restarted playback.");
+    }
+
+    private static Task<T> OnWorker<T>(MpvPlaybackEngine engine, Func<T> read) =>
+        ((PlaybackWorker)typeof(MpvPlaybackEngine).GetField("_worker",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(engine)!).InvokeAsync(read);
+
+    private static string? NativeString(MpvPlaybackEngine engine, string property) =>
+        (string?)typeof(MpvPlaybackEngine).GetMethod("GetStringNative",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(engine, [property]);
+
+    private static AudioMix? AppliedMix(MpvPlaybackEngine engine) =>
+        (AudioMix?)typeof(MpvPlaybackEngine).GetField("_appliedMix",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(engine);
 
     private static async Task Until(Func<bool> condition)
     {

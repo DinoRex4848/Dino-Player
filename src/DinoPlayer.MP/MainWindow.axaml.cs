@@ -14,6 +14,8 @@ namespace DinoPlayer.MP;
 public sealed partial class MainWindow : Window
 {
     private const double PixelsPerSecond = 2.0;
+    // How often track volume and checkbox changes reach mpv while they keep changing.
+    private static readonly TimeSpan MixUpdateInterval = TimeSpan.FromMilliseconds(30);
     private const double TimelineWheelPixelsPerStep = 80;
     private const double FullscreenControlBarHeight = 56;
     private const double FullscreenControlBottomMargin = 16;
@@ -192,7 +194,7 @@ public sealed partial class MainWindow : Window
         AppLog.MessageWritten += OnLogMessage;
 
         _uiTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(200), DispatcherPriority.Background, UpdatePlaybackUi);
-        _mixTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(140), DispatcherPriority.Background, ApplyPendingMix)
+        _mixTimer = new DispatcherTimer(MixUpdateInterval, DispatcherPriority.Background, ApplyPendingMix)
         {
             IsEnabled = false
         };
