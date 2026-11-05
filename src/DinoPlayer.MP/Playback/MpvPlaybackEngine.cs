@@ -72,6 +72,11 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     // The mix last applied to the current media (mpv thread only). Volume-only
     // changes to it are sent as af-command instead of rebuilding the graph.
     private AudioMix? _appliedMix;
+    // The mix whose gains are written in mpv's af setting (mpv thread only). mpv
+    // rebuilds its audio filters from that setting on every seek and loop, which
+    // drops volumes sent with af-command since. SyncAudioFiltersNative writes the
+    // current gains back at those moments, when the reset hides the switch.
+    private AudioMix? _filterMix;
     private bool _preloadedHook;
     // Tracks found for the current media (mpv thread only), so file-loaded reuses them.
     private bool _tracksDiscovered;
@@ -230,6 +235,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             if (startPaused) SetPausedNative(true);
             SetPropertyNative("speed", "1");
             _appliedMix = null;
+            _filterMix = null;
             SetPropertyNative("af", string.Empty);
             SetPropertyNative("lavfi-complex", string.Empty);
             SetPropertyNative("aid", "no");
@@ -314,6 +320,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             if (generation != Generation || _activeGeneration != generation || !_mediaLoaded) return;
             // Stepping past either end is not an error worth a banner.
             _seekedSinceLoad = true;
+            if (direction < 0) SyncAudioFiltersNative(); // Stepping back is a seek.
             try { CommandNative(direction > 0 ? "frame-step" : "frame-back-step"); }
             catch (InvalidOperationException exception) { AppLog.Warn($"Frame step ignored: {exception.Message}"); }
         });
@@ -361,6 +368,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
                     return 0;
                 }
                 _seekedSinceLoad = true;
+                SyncAudioFiltersNative();
                 CommandNative("seek", request.Seconds.ToString("0.###", CultureInfo.InvariantCulture), "absolute+exact");
                 return 0;
             }).ConfigureAwait(false);
@@ -408,6 +416,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         {
             if (generation != Generation || _activeGeneration != generation || !_mediaLoaded) return;
             _seekedSinceLoad = true;
+            SyncAudioFiltersNative();
             CommandNative("seek", seconds.ToString("0.###", CultureInfo.InvariantCulture), flags);
             AppLog.Info($"Seek requested: generation={generation}; seconds={seconds:0.###}; flags={flags}");
         });
@@ -606,6 +615,8 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             case MpvEventSeek:
                 // mpv also reports a seek while loading; only later ones move away from the start.
                 if (_activeGeneration == Generation && _startReady) _seekedSinceLoad = true;
+                // Covers seeks the app didn't send, such as looping back to the start.
+                if (_activeGeneration == Generation) SyncAudioFiltersNative();
                 RefreshPosition(notify: true, seeking: true);
                 break;
             case MpvEventPlaybackRestart:
@@ -730,7 +741,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         if (mix.Complex.Length == 0) return;
         SetPropertyNative("lavfi-complex", mix.Complex);
         SetPropertyNative("af", mix.Filters);
-        _appliedMix = mix;
+        _appliedMix = _filterMix = mix;
     }
 
     private void HandleEndFile(MpvNative.MpvEvent mpvEvent)
@@ -975,7 +986,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
         // Clear the gains first, so the old af graph never receives the new
         // channel count. A failure part-way leaves no mix to change live.
-        _appliedMix = null;
+        _appliedMix = _filterMix = null;
         // A new graph restarts the decoders and refresh-seeks.
         _seekedSinceLoad = true;
         _startReady = false;
@@ -986,7 +997,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             SetPropertyNative("aid", "no");
         }
         SetPropertyNative("af", mix.Filters);
-        _appliedMix = mix;
+        _appliedMix = _filterMix = mix;
 
         var elapsedSeconds = Stopwatch.GetElapsedTime(started).TotalSeconds;
         var positionAfter = GetDoubleNative("time-pos", positionBefore);
@@ -1010,6 +1021,20 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
         AppLog.Info($"Audio mix applied: source={source}; generation={request.Generation}; enabled={request.Description}; " +
                     $"position={positionBefore:0.000}; paused={pausedBefore}; graph={mix.Complex}; filters={mix.Filters}");
+    }
+
+    // Writes the live gains into mpv's af setting. Replacing it while playing
+    // re-buffers audio (heard as a repeat and a click), so this only runs as a
+    // seek or loop starts, when mpv resets the audio anyway.
+    private void SyncAudioFiltersNative()
+    {
+        if (_appliedMix is not { } mix || _filterMix is not { } written || written.Gains.SequenceEqual(mix.Gains)) return;
+        try
+        {
+            SetPropertyNative("af", mix.Filters);
+            _filterMix = mix;
+        }
+        catch (InvalidOperationException exception) { AppLog.Warn($"Could not keep track volumes through a seek: {exception.Message}"); }
     }
 
     // Changes each track's volume filter in place. Returns false (after logging)

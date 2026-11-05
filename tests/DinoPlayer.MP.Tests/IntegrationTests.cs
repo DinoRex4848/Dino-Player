@@ -143,6 +143,7 @@ internal static class IntegrationTests
         await Program.Test("track volume and checkbox changes apply live without restarting playback", () => LiveTrackVolume(source));
         await Program.Test("imports stay at zero during delayed audio setup and then begin at zero", () => ImportAtZero(source, silent));
         await Program.Test("opening sets up the audio graph before decoding, so saved volumes need no rebuild or rewind", () => OpenWithoutRebuild(source));
+        await Program.Test("live track volumes and unchecked tracks survive seeks and loops", () => VolumesSurviveSeeks(source));
         await SeekTests.Run();
     }
 
@@ -308,6 +309,36 @@ internal static class IntegrationTests
             Program.Check(probe.Restarts > before && probe.Position < .05, "A rewind after playback did not seek.");
         }
         finally { AppLog.MessageWritten -= Count; }
+    }
+
+    // mpv rebuilds its audio filters from the af setting on every seek and loop, so
+    // live volume changes must be written back there or unchecked tracks return.
+    private static async Task VolumesSurviveSeeks(string source)
+    {
+        using var engine = new MpvPlaybackEngine(IntPtr.Zero, "volume-seek-test", headless: true);
+        using var probe = new NativePlaybackProbe(engine);
+        var getString = typeof(MpvPlaybackEngine).GetMethod("GetStringNative", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        string Filters() => (string?)getString.Invoke(engine, ["af"]) ?? "";
+        await engine.OpenAsync(source, startPaused: true);
+        await Until(() => engine.GetSnapshot().IsLoaded && engine.GetSnapshot().Generation == engine.Generation && probe.Restarts > 0);
+        engine.AudioTracks[1].Enabled = false;
+        await engine.ApplyAudioMixAsync();
+        Program.Check(Filters().Contains("volume@t1=0.5"), $"The unchecked track was not a live change: {Filters()}");
+        await engine.SeekAndWaitAsync(1);
+        Program.Check(Filters().Contains("volume@t1=0[") || Filters().Contains("volume@t1=0,") || Filters().Contains("volume@t1=0]"),
+            $"Seeking would bring back the unchecked track: {Filters()}");
+
+        // A loop is a seek mpv starts itself.
+        await engine.SetLoopingAsync(true);
+        var duration = engine.GetSnapshot().DurationSeconds;
+        await engine.SeekAndWaitAsync(duration - .6);
+        engine.AudioTracks[2].VolumePercent = 80;
+        await engine.ApplyAudioMixAsync();
+        Program.Check(Filters().Contains("volume@t2=0.5"), $"The volume was not a live change: {Filters()}");
+        await engine.SetPausedAsync(false);
+        await Until(() => probe.Position < duration - 1);
+        await Until(() => Filters().Contains("volume@t2=0.8"));
+        await engine.SetPausedAsync(true);
     }
 
     private static async Task NativePlayback(string source, string silent)
