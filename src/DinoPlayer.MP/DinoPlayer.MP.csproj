@@ -7,7 +7,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>../../Icons/Dino_Player_Logo.ico</ApplicationIcon>
     <AssemblyName>DinoPlayer.MP</AssemblyName>
-    <Version>1.5.3</Version>
+    <Version>1.6.0</Version>
     <Product>Dino Player</Product>
     <Title>Dino Player</Title>
     <RootNamespace>DinoPlayer.MP</RootNamespace>

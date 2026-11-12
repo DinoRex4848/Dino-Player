@@ -73,7 +73,9 @@ Run the installer again if you move this folder. Launcher registration is option
     instructions += """
 USING THE PLAYER
 Click the import prompt or drop a video onto the window.
-Space plays/pauses; Left/Right seek; =/+ and -/_ change speed; F11 toggles fullscreen.
+Space plays/pauses; Left/Right seek; Shift+Left/Right step one second; , and . step one frame.
+=/+ and -/_ change speed; Up/Down change volume; M mutes; F11 toggles fullscreen.
+I and O set the crop start and end; Ctrl+E exports the clip with the Export tab's settings.
 Crop times display as text. Preferences > Enable editable crop times allows typing
 HH:MM:SS or HH:MM:SS.mmm; Enter applies an edit and Escape cancels it.
 Exports use the included FFmpeg. GPU encoding requires a supported NVIDIA GPU/driver;
